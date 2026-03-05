@@ -87,9 +87,6 @@ def evaluate(model, X_test, y_test):
     
     mlflow.log_metrics({"rmse": rmse, "r2": r2})
     return {"rmse": rmse, "r2": r2}
-
-# 3. src/train.py - substitua XGBClassifier por XGBRegressor
-model = XGBRegressor(**params)
 ```
 
 ### Multiclasse
@@ -113,10 +110,10 @@ MODEL_PARAMS = {
 poetry install
 poetry shell
 
-# Testes
+# Testes (190 testes, 74% coverage)
 ./test_ci_locally.sh                    # CI completo
 poetry run pytest tests/ -v             # Todos os testes
-poetry run pytest --cov=src             # Com cobertura
+poetry run pytest --cov=src --cov=api   # Com cobertura
 
 # Pipeline
 poetry run python generate_data.py      # Gerar dados (exemplo)
@@ -126,12 +123,11 @@ poetry run python scripts/test_pipeline.py # Testar end-to-end
 # MLflow
 mlflow ui --port 5000                   # Dashboard MLflow
 
+# Docker
+docker compose up api                  # API em container
+
 # Dashboard
 poetry run streamlit run scripts/dashboard.py  # Monitoramento
-
-# Qualidade
-poetry run autopep8 --diff src/         # Ver formatação
-poetry run flake8 src/                  # Linting
 ```
 
 ---
@@ -141,8 +137,9 @@ poetry run flake8 src/                  # Linting
 ```
 src/config.py           ← Mude TUDO aqui primeiro
 scripts/run_pipeline.py ← Adapte loading de dados + features
-src/features.py         ← Customize preprocessamento
+src/feature_engineering.py ← Customize feature engineering
 src/evaluate.py         ← Mude métricas (regressão/multiclasse)
+src/utils.py            ← Normalização de chaves de métricas
 tests/conftest.py       ← Adapte fixtures com seus dados
 ```
 
@@ -232,11 +229,11 @@ poetry add pandera
 # 1. Testes
 ./test_ci_locally.sh
 
-# 2. Cobertura
-poetry run pytest --cov=src --cov-report=term
+# 2. Cobertura (mínimo 70%)
+poetry run pytest --cov=src --cov=api --cov-report=term
 
 # 3. Formatação
-poetry run autopep8 --diff --recursive src/
+poetry run ruff check src/ tests/ api/
 
 # 4. Git
 git add .
@@ -248,9 +245,8 @@ git push
 
 ## 📚 Mais Informações
 
-- Tutorial completo: [TUTORIAL_NOVO_PROJETO.md](TUTORIAL_NOVO_PROJETO.md)
+- Tutorial completo: [DOCUMENTATION.md](DOCUMENTATION.md)
 - README principal: [README.md](README.md)
-- Guia Poetry: [POETRY_GUIDE.md](POETRY_GUIDE.md)
 
 ---
 
