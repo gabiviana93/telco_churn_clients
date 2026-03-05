@@ -276,22 +276,20 @@ FE_RISK_WEIGHTS = {
 }
 
 # Limiares de ciclo de vida
-FE_LIFECYCLE_NEW_MAX = _get_safe(
-    _config, "feature_engineering", "lifecycle", "new_max", default=3
-)
+FE_LIFECYCLE_NEW_MAX = _get_safe(_config, "feature_engineering", "lifecycle", "new_max", default=3)
 FE_LIFECYCLE_EARLY_MAX = _get_safe(
     _config, "feature_engineering", "lifecycle", "early_max", default=12
 )
-FE_LIFECYCLE_MID_MAX = _get_safe(
-    _config, "feature_engineering", "lifecycle", "mid_max", default=36
-)
+FE_LIFECYCLE_MID_MAX = _get_safe(_config, "feature_engineering", "lifecycle", "mid_max", default=36)
 
 # Colunas de serviço (para AdvancedFeatureEngineer)
 SERVICE_COLS_ALL = _get_safe(_config, "features", "service_columns", "all", default=[])
 SERVICE_COLS_STREAMING = _get_safe(_config, "features", "service_columns", "streaming", default=[])
 SERVICE_COLS_SECURITY = _get_safe(_config, "features", "service_columns", "security", default=[])
 INACTIVE_SERVICE_VALUES = _get_safe(
-    _config, "features", "inactive_service_values",
+    _config,
+    "features",
+    "inactive_service_values",
     default=["No", "No phone service", "No internet service"],
 )
 
@@ -299,8 +297,13 @@ INACTIVE_SERVICE_VALUES = _get_safe(
 VALID_VALUES = _get_safe(_config, "features", "valid_values", default={})
 
 # Valores de tipo de contrato (usados em feature engineering)
-CONTRACT_VALUES = _get_safe(_config, "features", "valid_values", "Contract",
-                            default=["Month-to-month", "One year", "Two year"])
+CONTRACT_VALUES = _get_safe(
+    _config,
+    "features",
+    "valid_values",
+    "Contract",
+    default=["Month-to-month", "One year", "Two year"],
+)
 
 # Padrões de pré-processamento
 CATEGORICAL_FILL_VALUE = _get_safe(
@@ -319,9 +322,7 @@ MISSING_CATEGORICAL_STRATEGY = _get_safe(
 )
 
 # Interpretabilidade / Visualização
-INTERPRET_TOP_N = _get_safe(
-    _config, "interpretability", "feature_importance", "top_n", default=20
-)
+INTERPRET_TOP_N = _get_safe(_config, "interpretability", "feature_importance", "top_n", default=20)
 INTERPRET_TOP_FEATURES = _get_safe(_config, "interpretability", "top_features", default=10)
 VIZ_FIGSIZE_LARGE = tuple(
     _get_safe(_config, "interpretability", "visualization", "figsize_large", default=[12, 8])
@@ -332,15 +333,11 @@ VIZ_FIGSIZE_MEDIUM = tuple(
 VIZ_FIGSIZE_SMALL = tuple(
     _get_safe(_config, "interpretability", "visualization", "figsize_small", default=[8, 6])
 )
-VIZ_TOP_FACTORS = _get_safe(
-    _config, "interpretability", "visualization", "top_factors", default=3
-)
+VIZ_TOP_FACTORS = _get_safe(_config, "interpretability", "visualization", "top_factors", default=3)
 SHAP_SAMPLE_SIZE = _get_safe(
     _config, "interpretability", "visualization", "shap_sample_size", default=500
 )
-SHAP_N_SAMPLES = _get_safe(
-    _config, "interpretability", "shap", "n_samples", default=1000
-)
+SHAP_N_SAMPLES = _get_safe(_config, "interpretability", "shap", "n_samples", default=1000)
 
 # Monitoramento de drift
 DRIFT_PSI_BINS = _get_safe(_config, "drift", "psi_bins", default=10)
@@ -393,9 +390,7 @@ DEFAULT_OPTIMIZATION_TIMEOUT = _get_safe(_config, "optimization", "timeout", def
 # REGISTRO DE MODELOS
 # =============================================================================
 
-MODEL_REGISTRY: dict[str, dict[str, Any]] = _get_safe(
-    _config, "model", "registry", default={}
-)
+MODEL_REGISTRY: dict[str, dict[str, Any]] = _get_safe(_config, "model", "registry", default={})
 
 
 def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
@@ -454,7 +449,6 @@ def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
     filtered.update(algo_cfg.get("default_params", {}))
 
     return model_class(**filtered)
-
 
 
 # =============================================================================

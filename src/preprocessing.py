@@ -22,7 +22,6 @@ from src.config import (
     POSITIVE_CLASS,
     RANDOM_STATE,
     SCALER_TYPE,
-    STEP_PREPROCESSING,
     TEST_SIZE,
 )
 from src.logger import setup_logger
@@ -140,10 +139,10 @@ def build_preprocessor(
             "deve conter features"
         )
 
-    if numeric_features and not isinstance(numeric_features, (list, tuple)):
+    if numeric_features and not isinstance(numeric_features, list | tuple):
         raise TypeError("numeric_features deve ser uma lista ou tupla")
 
-    if categorical_features and not isinstance(categorical_features, (list, tuple)):
+    if categorical_features and not isinstance(categorical_features, list | tuple):
         raise TypeError("categorical_features deve ser uma lista ou tupla")
 
     # Validar scaler_type

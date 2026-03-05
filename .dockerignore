@@ -1,0 +1,43 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# Virtual environments
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Notebooks & experiments
+notebooks/
+mlruns/
+optuna_studies/
+catboost_info/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Docs
+*.md
+LICENSE
+
+# CI/CD
+.github/
+
+# Logs
+logs/
+*.log

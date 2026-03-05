@@ -70,13 +70,13 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data, ensure_ascii=False)
 
 
-def setup_logger(name, log_file="logs/pipeline.log", level=logging.INFO):
+def setup_logger(name, log_file=None, level=logging.INFO):
     """
     Configura logger genérico com saída dupla (console + arquivo JSON).
 
     Args:
         name: Nome do logger (geralmente __name__)
-        log_file: Caminho do arquivo de log (padrão logs/pipeline.log)
+        log_file: Caminho do arquivo de log (padrão: logs/pipeline.log relativo ao projeto)
         level: Nível de logging (padrão INFO)
 
     Returns:
@@ -87,6 +87,8 @@ def setup_logger(name, log_file="logs/pipeline.log", level=logging.INFO):
         logger.info("Processamento iniciado")
         logger.error("Erro durante treinamento", extra={'step': 'validation'})
     """
+    if log_file is None:
+        log_file = str(Path(__file__).resolve().parent.parent / "logs" / "pipeline.log")
 
     # Criar logger
     logger = logging.getLogger(name)
@@ -101,7 +103,7 @@ def setup_logger(name, log_file="logs/pipeline.log", level=logging.INFO):
     if log_dir:
         Path(log_dir).mkdir(parents=True, exist_ok=True)
 
-    # ==================== FILE HANDLER (JSON) ====================
+    # ==================== HANDLER DE ARQUIVO (JSON) ====================
     try:
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(level)
@@ -110,7 +112,7 @@ def setup_logger(name, log_file="logs/pipeline.log", level=logging.INFO):
     except Exception as e:
         print(f"WARN: Erro ao criar handler de arquivo: {e}")
 
-    # ==================== CONSOLE HANDLER (Legível) ====================
+    # ==================== HANDLER DE CONSOLE (Legível) ====================
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
 

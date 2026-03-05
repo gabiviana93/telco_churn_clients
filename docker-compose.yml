@@ -1,0 +1,82 @@
+# =============================================================================
+# Customer Churn Prediction - Docker Compose
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API Service (Production)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: churn-api
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - MODEL_PATH=/app/models/model.joblib
+    volumes:
+      - ./models:/app/models:ro
+      - ./reports:/app/reports:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # API Service (Development with hot reload)
+  # ---------------------------------------------------------------------------
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: churn-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - MODEL_PATH=/app/models/model.joblib
+    volumes:
+      - ./src:/app/src
+      - ./api:/app/api
+      - ./scripts:/app/scripts
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./reports:/app/reports
+    profiles:
+      - dev
+
+  # ---------------------------------------------------------------------------
+  # MLflow Tracking Server
+  # ---------------------------------------------------------------------------
+  mlflow:
+    image: python:3.11-slim
+    container_name: mlflow-server
+    ports:
+      - "5000:5000"
+    command: >
+      bash -c "pip install mlflow && 
+               mlflow server 
+               --backend-store-uri sqlite:///mlflow.db 
+               --default-artifact-root /mlruns 
+               --host 0.0.0.0 
+               --port 5000"
+    volumes:
+      - mlflow-data:/mlruns
+    profiles:
+      - mlflow
+
+volumes:
+  mlflow-data:

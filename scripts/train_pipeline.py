@@ -1,35 +1,56 @@
+import mlflow
 import pandas as pd
-from src.config import *
+
+from src.config import (
+    DATA_DIR_RAW,
+    FILENAME,
+    ID_COL,
+    MLFLOW_EXPERIMENT,
+    MLFLOW_TRACKING_URI,
+    MODELS_DIR,
+    TARGET,
+    ModelConfig,
+)
+from src.pipeline import ChurnPipeline
 from src.preprocessing import split_data
-from src.features import build_preprocessor
-from src.train import train_model, train_with_mlflow
-from src.evaluate import evaluate
 
-df = pd.read_csv("data/processed/data.csv")
 
-num_features = df.select_dtypes("number").columns.drop(TARGET)
-cat_features = df.select_dtypes("object").columns
+def main():
+    # 1. Carregar dados
+    df = pd.read_csv(DATA_DIR_RAW / FILENAME)
+    df = df.drop(columns=[ID_COL])
 
-X_train, X_test, y_train, y_test = split_data(
-    df, TARGET, TEST_SIZE, RANDOM_STATE
-)
+    # 2. Split treino/teste
+    X_train, X_test, y_train, y_test = split_data(df, TARGET)
 
-params = {
-    "n_estimators": 300,
-    "max_depth": 6,
-    "learning_rate": 0.05,
-    "random_state": RANDOM_STATE,
-    "eval_metric": "logloss"
-}
+    # 3. Configurar modelo (parâmetros do YAML ou customizados)
+    config = ModelConfig()
 
-preprocessor = build_preprocessor(num_features, cat_features)
-pipeline = train_model(preprocessor, params)
+    # 4. Configurar MLflow
+    mlflow.set_tracking_uri(f"file://{MLFLOW_TRACKING_URI}")
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
-pipeline = train_with_mlflow(
-    X_train, y_train,
-    pipeline,
-    params,
-    MLFLOW_EXPERIMENT
-)
+    with mlflow.start_run():
+        # 5. Treinar com cross-validation
+        pipeline = ChurnPipeline(config=config)
+        pipeline.fit(X_train, y_train, validate=True)
 
-evaluate(pipeline, X_test, y_test)
+        # Logar parâmetros e métricas no MLflow
+        mlflow.log_params(config.to_dict())
+        mlflow.log_metrics(pipeline.metrics)
+
+        # 6. Avaliar no conjunto de teste
+        metrics = pipeline.evaluate(X_test, y_test)
+        mlflow.log_metrics(metrics)
+
+        # 7. Salvar modelo
+        model_path = MODELS_DIR / "model.joblib"
+        pipeline.save(model_path)
+
+        print(f"CV Metrics: {pipeline.metrics}")
+        print(f"Test Metrics: {metrics}")
+        print(f"Modelo salvo em: {model_path}")
+
+
+if __name__ == "__main__":
+    main()

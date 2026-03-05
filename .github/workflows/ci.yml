@@ -1,262 +1,390 @@
-name: CI - Teste e Validação
+# =============================================================================
+# CI - Lint, Imports, Testes e Validação
+# =============================================================================
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop, "feature/**"]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 permissions:
   contents: read
-  checks: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "1.8.2"
 
 jobs:
-  quality-checks:
-    name: Verificações de Qualidade
+  # ---------------------------------------------------------------------------
+  # Job 1: Lint de código (ruff, black, isort)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: "🔍 Lint"
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
-      
+
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
+          key: lint-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-3.12-
-      
+            lint-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
-      
-      - name: Verificar sintaxe Python
+
+      - name: Ruff (linter)
+        run: poetry run ruff check src/ api/ tests/ scripts/
+
+      - name: Black (formatação)
+        run: poetry run black --check src/ api/ tests/ scripts/
+
+      - name: isort (ordenação de imports)
+        run: poetry run isort --check-only src/ api/ tests/ scripts/
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Verificação de importações e ambiente Poetry
+  # ---------------------------------------------------------------------------
+  imports:
+    name: "📦 Imports & Ambiente"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: imports-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            imports-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
+      - name: Instalar dependências
+        run: poetry install --no-interaction --no-root
+
+      - name: Verificar sintaxe Python (todos os arquivos)
         run: |
-          poetry run python -m py_compile src/*.py
-          poetry run python -m py_compile tests/*.py
-          poetry run python -m py_compile scripts/*.py
-      
-      - name: Validar imports
-        run: |
+          echo "=== Verificando sintaxe ==="
           poetry run python -c "
-          import sys
-          import pathlib
-          for py_file in pathlib.Path('src').glob('**/*.py'):
-              if '__pycache__' not in str(py_file):
+          import ast, pathlib, sys
+
+          errors = []
+          for pattern in ['src/**/*.py', 'api/**/*.py', 'tests/**/*.py', 'scripts/**/*.py']:
+              for py_file in pathlib.Path('.').glob(pattern):
+                  if '__pycache__' in str(py_file):
+                      continue
                   try:
                       with open(py_file) as f:
-                          compile(f.read(), str(py_file), 'exec')
+                          ast.parse(f.read(), filename=str(py_file))
                   except SyntaxError as e:
-                      print(f'Erro de sintaxe em {py_file}: {e}')
-                      sys.exit(1)
-          print('✅ Todos os arquivos Python têm sintaxe válida')
+                      errors.append(f'{py_file}:{e.lineno} - {e.msg}')
+
+          if errors:
+              print('Erros de sintaxe encontrados:')
+              for err in errors:
+                  print(f'  {err}')
+              sys.exit(1)
+          print('Sintaxe OK em todos os arquivos')
           "
-      
-      - name: Verificar linting com pylint
-        continue-on-error: true
+
+      - name: Verificar importações dos módulos src
         run: |
-          poetry run pylint src/ --fail-under=7.0 --disable=C0111,C0103,R0913,R0914 2>/dev/null || echo "Aviso: pylint não disponível"
-      
-      - name: Verificar estilo com flake8
-        continue-on-error: true
+          echo "=== Importando módulos src ==="
+          poetry run python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          modules = [
+              'src.config',
+              'src.enums',
+              'src.logger',
+              'src.utils',
+              'src.preprocessing',
+              'src.feature_engineering',
+              'src.pipeline',
+              'src.evaluate',
+              'src.inference',
+              'src.interpret',
+              'src.monitoring',
+              'src.optimization',
+              'src.notebook_utils',
+          ]
+
+          failed = []
+          for mod in modules:
+              try:
+                  __import__(mod)
+                  print(f' {mod}')
+              except Exception as e:
+                  failed.append((mod, str(e)))
+                  print(f' {mod}: {e}')
+
+          if failed:
+              print(f'\n{len(failed)} módulo(s) falharam:')
+              for mod, err in failed:
+                  print(f'  {mod}: {err}')
+              sys.exit(1)
+          print(f'\n Todos os {len(modules)} módulos importados com sucesso')
+          "
+
+      - name: Verificar importações da API
         run: |
-          poetry run flake8 src/ --max-line-length=100 --ignore=E203,W503 2>/dev/null || echo "Aviso: flake8 não disponível"
+          echo "=== Importando módulos da API ==="
+          poetry run python -c "
+          import sys
+          sys.path.insert(0, '.')
 
-  unit-tests:
-    name: Testes Unitários
+          modules = [
+              'api.core.config',
+              'api.core.logging',
+              'api.schemas.prediction',
+              'api.schemas.drift',
+              'api.services.model_service',
+              'api.routes.health',
+              'api.routes.prediction',
+              'api.routes.interpret',
+              'api.routes.drift',
+              'api.main',
+          ]
+
+          failed = []
+          for mod in modules:
+              try:
+                  __import__(mod)
+                  print(f'  {mod}')
+              except Exception as e:
+                  failed.append((mod, str(e)))
+                  print(f'  {mod}: {e}')
+
+          if failed:
+              print(f'\n{len(failed)} módulo(s) falharam:')
+              for mod, err in failed:
+                  print(f'  {mod}: {err}')
+              sys.exit(1)
+          print(f'\nTodos os {len(modules)} módulos da API importados com sucesso')
+          "
+
+      - name: Verificar consistência pyproject.toml / poetry.lock
+        run: poetry check --lock
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Testes unitários e de integração
+  # ---------------------------------------------------------------------------
+  tests:
+    name: "🧪 Testes"
     runs-on: ubuntu-latest
-    
+    needs: [lint, imports]
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
-      
+
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
+          key: tests-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-3.12-
-      
+            tests-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
-      
-      # - name: Executar pytest
-      #   run: |
-      #     poetry run pytest tests/ -v --tb=short
 
-      # poetry run pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=html
-      
-      # - name: Upload coverage reports
-      #   uses: codecov/codecov-action@v3
-      #   with:
-      #     files: ./coverage.xml
-      #     flags: unittests
-      #     name: codecov-umbrella
-      #     fail_ci_if_error: false
+      - name: Executar testes com cobertura
+        run: |
+          poetry run pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=src \
+            --cov=api \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70
 
-  pipeline-validation:
-    name: Validação do Pipeline
+      - name: Upload relatório de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Validação do Pipeline ML e Monitoramento
+  # ---------------------------------------------------------------------------
+  ml-validation:
+    name: "🤖 Validação ML"
     runs-on: ubuntu-latest
-    
+    needs: [lint, imports]
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
-      
+
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-pipeline-${{ hashFiles('**/poetry.lock') }}
+          key: ml-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-pipeline-
-      
+            ml-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
-      
-      # - name: Gerar dados de teste
-      #   run: |
-      #     poetry run python generate_data.py
-      
-      # - name: Executar pipeline completo
-      #   run: |
-      #     PYTHONPATH=/home/runner/work/modelo_projetos_ds/modelo_projetos_ds poetry run python scripts/run_pipeline.py
-      
-      # - name: Validar outputs do pipeline
-      #   run: |
-      #     poetry run python -c "
-      #     import json
-      #     import pathlib
-          
-      #     # Verificar se relatórios foram gerados
-      #     reports_dir = pathlib.Path('reports')
-      #     assert reports_dir.exists(), 'Diretório reports não existe'
-          
-      #     # Verificar métricas
-      #     metrics_file = reports_dir / 'metrics.json'
-      #     assert metrics_file.exists(), 'Arquivo metrics.json não encontrado'
-          
-      #     with open(metrics_file) as f:
-      #         metrics = json.load(f)
-      #         required_keys = ['accuracy', 'f1_score', 'precision', 'recall']
-      #         for key in required_keys:
-      #             assert key in metrics, f'Métrica {key} não encontrada'
-          
-      #     # Verificar dados processados
-      #     data_file = pathlib.Path('data/processed/data.csv')
-      #     assert data_file.exists(), 'Arquivo de dados processados não encontrado'
-          
-      #     print('✅ Pipeline validado com sucesso!')
-      #     "
 
-  monitoring-validation:
-    name: Validação de Monitoramento
+      - name: Validar pipeline de ML (classes e enums)
+        run: |
+          poetry run python -c "
+          from src.pipeline import ChurnPipeline
+          from src.optimization import HyperparameterOptimizer, OptimizationConfig
+          from src.enums import ModelType, DriftSeverity
+          from src.evaluate import evaluate
+          from src.feature_engineering import FeatureEngineer, AdvancedFeatureEngineer
+
+          print('ChurnPipeline importado')
+          print('HyperparameterOptimizer importado')
+          print('ModelType/DriftSeverity disponíveis:', list(ModelType))
+          print('evaluate() disponível')
+          print('FeatureEngineer/AdvancedFeatureEngineer importados')
+          "
+
+      - name: Validar detecção de drift
+        run: |
+          poetry run python -c "
+          import numpy as np
+          from src.monitoring import population_stability_index
+
+          np.random.seed(42)
+          baseline = np.random.normal(0, 1, 1000)
+          similar  = np.random.normal(0, 1, 1000)
+          drifted  = np.random.normal(1, 1, 1000)
+
+          psi_ok    = population_stability_index(baseline, similar)
+          psi_drift = population_stability_index(baseline, drifted)
+
+          assert psi_ok < 0.15, f'PSI sem drift deveria ser < 0.15, obteve {psi_ok:.4f}'
+          assert psi_drift > 0.1, f'PSI com drift deveria ser > 0.1, obteve {psi_drift:.4f}'
+
+          print(f'PSI sem drift:  {psi_ok:.4f} (< 0.15)')
+          print(f'PSI com drift:  {psi_drift:.4f} (> 0.10)')
+          print('Detecção de drift validada')
+          "
+
+      - name: Validar métricas disponíveis
+        run: |
+          poetry run python -c "
+          from src.utils import normalize_metrics_keys
+
+          raw = {
+              'f1_score': 0.57, 'roc_auc': 0.83, 'auprc': 0.79,
+              'accuracy': 0.80, 'precision': 0.65, 'recall': 0.52
+          }
+          normalized = normalize_metrics_keys(raw)
+          expected = ['f1_score', 'roc_auc', 'auprc', 'accuracy', 'precision', 'recall']
+          for key in expected:
+              assert key in normalized, f'Métrica {key} não encontrada após normalização'
+
+          print('Todas as métricas (incluindo AUPRC) normalizadas corretamente')
+          "
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Build Docker (somente main/develop)
+  # ---------------------------------------------------------------------------
+  docker:
+    name: "🐳 Docker Build"
     runs-on: ubuntu-latest
-    
+    needs: [tests]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Instalar Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.2
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-      
-      - name: Cache Poetry virtualenv
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: ${{ runner.os }}-poetry-monitoring-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-monitoring-
-      
-      - name: Instalar dependências
-        run: poetry install --no-interaction --no-root
-      
-      # - name: Testar detecção de drift
-      #   run: |
-      #     poetry run python -c "
-      #     import sys
-      #     import pandas as pd
-      #     import numpy as np
-      #     from src.monitoring import population_stability_index, detect_drift
-          
-      #     # Gerar dados de teste sem drift
-      #     np.random.seed(42)
-      #     baseline = np.random.normal(loc=0, scale=1, size=1000)
-      #     current = np.random.normal(loc=0, scale=1, size=1000)
-          
-      #     # Calcular PSI
-      #     psi = population_stability_index(baseline, current)
-      #     print(f'PSI (sem drift): {psi:.4f}')
-      #     assert psi < 0.15, f'PSI muito alto para dados similares: {psi}'
-          
-      #     # Gerar dados com drift
-      #     current_drift = np.random.normal(loc=1, scale=1, size=1000)
-      #     psi_drift = population_stability_index(baseline, current_drift)
-      #     print(f'PSI (com drift): {psi_drift:.4f}')
-          
-      #     print('✅ Detecção de drift validada!')
-      #     "
 
-  build-status:
-    name: Status Final
+      - name: Build Docker image (production)
+        run: docker build --target production -t churn-api:${{ github.sha }} .
+
+      - name: Verificar imagem
+        run: |
+          docker images churn-api:${{ github.sha }}
+          echo "Docker image construída com sucesso"
+
+  # ---------------------------------------------------------------------------
+  # Status final
+  # ---------------------------------------------------------------------------
+  ci-status:
+    name: "✅ CI Status"
     runs-on: ubuntu-latest
-    needs: [quality-checks, unit-tests, pipeline-validation, monitoring-validation]
+    needs: [lint, imports, tests, ml-validation]
     if: always()
-    
+
     steps:
-      - name: Check build status
+      - name: Verificar resultados
         run: |
-          echo "================================"
-          echo "✅ CI Pipeline Completado!"
-          echo "================================"
-          echo ""
-          echo "Jobs executados:"
-          echo "  ✓ Verificações de Qualidade"
-          echo "  ✓ Testes Unitários"
-          echo "  ✓ Validação do Pipeline"
-          echo "  ✓ Validação de Monitoramento"
-          echo ""
-          echo "Para mais detalhes, veja os logs acima."
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "Lint falhou"
+            exit 1
+          fi
+          if [ "${{ needs.imports.result }}" != "success" ]; then
+            echo "Verificação de imports falhou"
+            exit 1
+          fi
+          if [ "${{ needs.tests.result }}" != "success" ]; then
+            echo "Testes falharam"
+            exit 1
+          fi
+          if [ "${{ needs.ml-validation.result }}" != "success" ]; then
+            echo "Validação ML falhou"
+            exit 1
+          fi
+          echo "Todos os checks passaram!"

@@ -1,191 +1,155 @@
-name: Code Quality - Pre-commit
+# =============================================================================
+# Análise de Qualidade de Código (deep analysis)
+# =============================================================================
+name: Code Quality
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 permissions:
   contents: read
-  checks: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "1.8.2"
 
 jobs:
-  code-quality:
-    name: Qualidade de Código
+  quality:
+    name: "Análise de Qualidade"
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
-      
+
       - name: Cache Poetry virtualenv
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-quality-${{ hashFiles('**/poetry.lock') }}
-      
+          key: quality-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
-      
-      - name: Verificar formatação com autopep8
-        continue-on-error: true
-        run: |
-          poetry run autopep8 --diff --recursive src/ tests/ scripts/ || echo "Aviso: Alguns arquivos poderiam ser reformatados"
-      
-      - name: Verificar duplicação de código
+
+      - name: Verificar funções grandes (>50 linhas)
         continue-on-error: true
         run: |
           poetry run python -c "
-          import pathlib
-          from collections import defaultdict
-          
-          # Análise simples de duplicação
-          lines_count = defaultdict(int)
-          for py_file in pathlib.Path('src').glob('**/*.py'):
-              if '__pycache__' not in str(py_file):
-                  with open(py_file) as f:
-                      for line in f:
-                          stripped = line.strip()
-                          if stripped and not stripped.startswith('#'):
-                              lines_count[stripped] += 1
-          
-          # Encontrar linhas duplicadas
-          duplicated = {line: count for line, count in lines_count.items() if count > 3 and len(line) > 30}
-          
-          if duplicated:
-              print('⚠️  Possível código duplicado encontrado:')
-              for line, count in sorted(duplicated.items(), key=lambda x: x[1], reverse=True)[:5]:
-                  print(f'  {count}x: {line[:60]}...')
-          else:
-              print('✅ Nenhuma duplicação significativa detectada')
-          "
-      
-      - name: Verificar tamanho de funções
-        continue-on-error: true
-        run: |
-          poetry run python -c "
-          import ast
-          import pathlib
-          
+          import ast, pathlib
+
           class FunctionAnalyzer(ast.NodeVisitor):
               def __init__(self):
-                  self.large_functions = []
-                  self.current_file = None
-              
+                  self.large = []
+                  self.file = None
+
               def visit_FunctionDef(self, node):
                   lines = node.end_lineno - node.lineno
                   if lines > 50:
-                      self.large_functions.append((self.current_file, node.name, lines))
+                      self.large.append((self.file, node.name, lines))
                   self.generic_visit(node)
-          
+
           analyzer = FunctionAnalyzer()
           for py_file in pathlib.Path('src').glob('**/*.py'):
               if '__pycache__' not in str(py_file):
-                  analyzer.current_file = py_file
+                  analyzer.file = str(py_file)
                   with open(py_file) as f:
                       try:
                           tree = ast.parse(f.read())
                           analyzer.visit(tree)
                       except SyntaxError:
                           pass
-          
-          if analyzer.large_functions:
-              print('⚠️  Funções grandes encontradas (>50 linhas):')
-              for file, name, lines in analyzer.large_functions:
-                  print(f'  {file}: {name} ({lines} linhas)')
+
+          if analyzer.large:
+              print('Funções grandes (>50 linhas):')
+              for file, name, lines in sorted(analyzer.large, key=lambda x: -x[2]):
+                  print(f'  {file}: {name}() — {lines} linhas')
           else:
-              print('✅ Todas as funções têm tamanho apropriado')
+              print('Todas as funções têm tamanho adequado')
           "
-      
-      - name: Validar docstrings
-        continue-on-error: true
-        run: |
-          poetry run python -c "
-          import ast
-          import pathlib
-          
-          class DocstringChecker(ast.NodeVisitor):
-              def __init__(self):
-                  self.missing_docs = []
-              
-              def visit_FunctionDef(self, node):
-                  if not ast.get_docstring(node) and not node.name.startswith('_'):
-                      self.missing_docs.append((node.name, node.lineno))
-                  self.generic_visit(node)
-              
-              def visit_ClassDef(self, node):
-                  if not ast.get_docstring(node) and not node.name.startswith('_'):
-                      self.missing_docs.append((node.name, node.lineno))
-                  self.generic_visit(node)
-          
-          checker = DocstringChecker()
-          for py_file in pathlib.Path('src').glob('**/*.py'):
-              if '__pycache__' not in str(py_file):
-                  with open(py_file) as f:
-                      try:
-                          tree = ast.parse(f.read())
-                          checker.visit(tree)
-                      except SyntaxError:
-                          pass
-          
-          if checker.missing_docs:
-              print('⚠️  Docstrings faltando em:')
-              for name, lineno in checker.missing_docs[:10]:
-                  print(f'  Linha {lineno}: {name}')
-          else:
-              print('✅ Todas as funções e classes têm docstrings')
-          "
-      
+
       - name: Verificar complexidade ciclomática
         continue-on-error: true
         run: |
           poetry run python -c "
-          import ast
-          import pathlib
-          
+          import ast, pathlib
+
           class ComplexityChecker(ast.NodeVisitor):
               def __init__(self):
-                  self.complex_functions = []
-              
+                  self.results = []
+                  self.file = None
+
               def visit_FunctionDef(self, node):
-                  complexity = self.calculate_complexity(node)
-                  if complexity > 10:
-                      self.complex_functions.append((node.name, complexity))
-                  self.generic_visit(node)
-              
-              def calculate_complexity(self, node):
-                  complexity = 1
+                  c = 1
                   for child in ast.walk(node):
-                      if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
-                          complexity += 1
-                  return complexity
-          
+                      if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler,
+                                            ast.BoolOp, ast.Assert)):
+                          c += 1
+                  if c > 10:
+                      self.results.append((self.file, node.name, c))
+                  self.generic_visit(node)
+
           checker = ComplexityChecker()
           for py_file in pathlib.Path('src').glob('**/*.py'):
               if '__pycache__' not in str(py_file):
+                  checker.file = str(py_file)
                   with open(py_file) as f:
                       try:
-                          tree = ast.parse(f.read())
-                          checker.visit(tree)
+                          checker.visit(ast.parse(f.read()))
                       except SyntaxError:
                           pass
-          
-          if checker.complex_functions:
-              print('⚠️  Funções com alta complexidade (>10):')
-              for name, complexity in checker.complex_functions[:5]:
-                  print(f'  {name}: Complexidade {complexity}')
+
+          if checker.results:
+              print('Alta complexidade ciclomática (>10):')
+              for file, name, c in sorted(checker.results, key=lambda x: -x[2]):
+                  print(f'  {file}: {name}() — complexidade {c}')
           else:
-              print('✅ Nenhuma função com complexidade excessiva')
+              print('Complexidade ciclomática OK')
           "
+
+      - name: Verificar docstrings públicas faltando
+        continue-on-error: true
+        run: |
+          poetry run python -c "
+          import ast, pathlib
+
+          missing = []
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' in str(py_file) or '__init__' in str(py_file):
+                  continue
+              with open(py_file) as f:
+                  try:
+                      tree = ast.parse(f.read())
+                  except SyntaxError:
+                      continue
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                      if not node.name.startswith('_') and not ast.get_docstring(node):
+                          missing.append(f'{py_file}:{node.lineno} {node.name}')
+
+          if missing:
+              print(f'{len(missing)} docstrings faltando em funções/classes públicas:')
+              for m in missing[:10]:
+                  print(f'  {m}')
+              if len(missing) > 10:
+                  print(f'  ... e mais {len(missing)-10}')
+          else:
+              print('Todas as funções/classes públicas têm docstrings')
+          "
+
+      - name: Type checking com mypy
+        continue-on-error: true
+        run: poetry run mypy src/ api/ --ignore-missing-imports --no-error-summary || true
