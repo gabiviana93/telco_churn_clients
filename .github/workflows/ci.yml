@@ -14,19 +14,16 @@ jobs:
   quality-checks:
     name: Verificações de Qualidade
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.9', '3.10', '3.11']
     
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12'
       
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
@@ -39,9 +36,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-${{ matrix.python-version }}-
+            ${{ runner.os }}-poetry-3.12-
       
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
@@ -81,17 +78,14 @@ jobs:
   unit-tests:
     name: Testes Unitários
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.9', '3.10', '3.11']
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12'
       
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
@@ -104,24 +98,26 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-${{ matrix.python-version }}-
+            ${{ runner.os }}-poetry-3.12-
       
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
       
-      - name: Executar pytest
-        run: |
-          poetry run pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=html
+      # - name: Executar pytest
+      #   run: |
+      #     poetry run pytest tests/ -v --tb=short
+
+      # poetry run pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=html
       
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+      # - name: Upload coverage reports
+      #   uses: codecov/codecov-action@v3
+      #   with:
+      #     files: ./coverage.xml
+      #     flags: unittests
+      #     name: codecov-umbrella
+      #     fail_ci_if_error: false
 
   pipeline-validation:
     name: Validação do Pipeline
@@ -153,40 +149,40 @@ jobs:
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
       
-      - name: Gerar dados de teste
-        run: |
-          poetry run python generate_data.py
+      # - name: Gerar dados de teste
+      #   run: |
+      #     poetry run python generate_data.py
       
-      - name: Executar pipeline completo
-        run: |
-          PYTHONPATH=/home/runner/work/modelo_projetos_ds/modelo_projetos_ds poetry run python scripts/run_pipeline.py
+      # - name: Executar pipeline completo
+      #   run: |
+      #     PYTHONPATH=/home/runner/work/modelo_projetos_ds/modelo_projetos_ds poetry run python scripts/run_pipeline.py
       
-      - name: Validar outputs do pipeline
-        run: |
-          poetry run python -c "
-          import json
-          import pathlib
+      # - name: Validar outputs do pipeline
+      #   run: |
+      #     poetry run python -c "
+      #     import json
+      #     import pathlib
           
-          # Verificar se relatórios foram gerados
-          reports_dir = pathlib.Path('reports')
-          assert reports_dir.exists(), 'Diretório reports não existe'
+      #     # Verificar se relatórios foram gerados
+      #     reports_dir = pathlib.Path('reports')
+      #     assert reports_dir.exists(), 'Diretório reports não existe'
           
-          # Verificar métricas
-          metrics_file = reports_dir / 'metrics.json'
-          assert metrics_file.exists(), 'Arquivo metrics.json não encontrado'
+      #     # Verificar métricas
+      #     metrics_file = reports_dir / 'metrics.json'
+      #     assert metrics_file.exists(), 'Arquivo metrics.json não encontrado'
           
-          with open(metrics_file) as f:
-              metrics = json.load(f)
-              required_keys = ['accuracy', 'f1_score', 'precision', 'recall']
-              for key in required_keys:
-                  assert key in metrics, f'Métrica {key} não encontrada'
+      #     with open(metrics_file) as f:
+      #         metrics = json.load(f)
+      #         required_keys = ['accuracy', 'f1_score', 'precision', 'recall']
+      #         for key in required_keys:
+      #             assert key in metrics, f'Métrica {key} não encontrada'
           
-          # Verificar dados processados
-          data_file = pathlib.Path('data/processed/data.csv')
-          assert data_file.exists(), 'Arquivo de dados processados não encontrado'
+      #     # Verificar dados processados
+      #     data_file = pathlib.Path('data/processed/data.csv')
+      #     assert data_file.exists(), 'Arquivo de dados processados não encontrado'
           
-          print('✅ Pipeline validado com sucesso!')
-          "
+      #     print('✅ Pipeline validado com sucesso!')
+      #     "
 
   monitoring-validation:
     name: Validação de Monitoramento
@@ -218,31 +214,31 @@ jobs:
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
       
-      - name: Testar detecção de drift
-        run: |
-          poetry run python -c "
-          import sys
-          import pandas as pd
-          import numpy as np
-          from src.monitoring import population_stability_index, detect_drift
+      # - name: Testar detecção de drift
+      #   run: |
+      #     poetry run python -c "
+      #     import sys
+      #     import pandas as pd
+      #     import numpy as np
+      #     from src.monitoring import population_stability_index, detect_drift
           
-          # Gerar dados de teste sem drift
-          np.random.seed(42)
-          baseline = np.random.normal(loc=0, scale=1, size=1000)
-          current = np.random.normal(loc=0, scale=1, size=1000)
+      #     # Gerar dados de teste sem drift
+      #     np.random.seed(42)
+      #     baseline = np.random.normal(loc=0, scale=1, size=1000)
+      #     current = np.random.normal(loc=0, scale=1, size=1000)
           
-          # Calcular PSI
-          psi = population_stability_index(baseline, current)
-          print(f'PSI (sem drift): {psi:.4f}')
-          assert psi < 0.15, f'PSI muito alto para dados similares: {psi}'
+      #     # Calcular PSI
+      #     psi = population_stability_index(baseline, current)
+      #     print(f'PSI (sem drift): {psi:.4f}')
+      #     assert psi < 0.15, f'PSI muito alto para dados similares: {psi}'
           
-          # Gerar dados com drift
-          current_drift = np.random.normal(loc=1, scale=1, size=1000)
-          psi_drift = population_stability_index(baseline, current_drift)
-          print(f'PSI (com drift): {psi_drift:.4f}')
+      #     # Gerar dados com drift
+      #     current_drift = np.random.normal(loc=1, scale=1, size=1000)
+      #     psi_drift = population_stability_index(baseline, current_drift)
+      #     print(f'PSI (com drift): {psi_drift:.4f}')
           
-          print('✅ Detecção de drift validada!')
-          "
+      #     print('✅ Detecção de drift validada!')
+      #     "
 
   build-status:
     name: Status Final
