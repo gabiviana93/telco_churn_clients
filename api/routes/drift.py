@@ -133,7 +133,7 @@ async def detect_data_drift(
                     "error_code": "INVALID_CSV",
                     "message": f"Failed to parse CSV file: {str(e)}",
                 },
-            )
+            ) from e
 
         # Get feature lists
         numeric_features, categorical_features = _get_feature_lists()
@@ -154,9 +154,7 @@ async def detect_data_drift(
 
         # Validate columns
         valid_features = [
-            f
-            for f in all_features
-            if f in reference_df.columns and f in production_df.columns
+            f for f in all_features if f in reference_df.columns and f in production_df.columns
         ]
         if not valid_features:
             raise HTTPException(
@@ -164,8 +162,7 @@ async def detect_data_drift(
                 detail={
                     "error_code": "MISSING_FEATURES",
                     "message": (
-                        "No matching features found between reference and "
-                        "production data."
+                        "No matching features found between reference and " "production data."
                     ),
                 },
             )
@@ -206,9 +203,7 @@ async def detect_data_drift(
             drift_percentage=round(drift_pct, 2),
             severity_counts=drift_report.severity_counts,
             overall_severity=severity,
-            features=[
-                FeatureDriftResult(**feat) for feat in report_dict["features"]
-            ],
+            features=[FeatureDriftResult(**feat) for feat in report_dict["features"]],
             recommendation=_get_recommendation(severity),
         )
 
@@ -222,7 +217,7 @@ async def detect_data_drift(
                 "error_code": "REFERENCE_DATA_NOT_FOUND",
                 "message": str(e),
             },
-        )
+        ) from e
     except Exception as e:
         logger.error("Drift detection failed", error=str(e))
         raise HTTPException(
@@ -231,7 +226,7 @@ async def detect_data_drift(
                 "error_code": "DRIFT_DETECTION_ERROR",
                 "message": f"Failed to detect drift: {str(e)}",
             },
-        )
+        ) from e
 
 
 @router.get(

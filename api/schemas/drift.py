@@ -39,9 +39,7 @@ class DriftReportResponse(BaseModel):
     features_checked: int = Field(..., description="Number of features analyzed")
     features_with_drift: int = Field(..., description="Number of features with drift")
     drift_percentage: float = Field(..., description="Percentage of features with drift")
-    severity_counts: dict[str, int] = Field(
-        ..., description="Count per severity level"
-    )
+    severity_counts: dict[str, int] = Field(..., description="Count per severity level")
     overall_severity: str = Field(
         ..., description="Overall drift severity: none, low, moderate, high"
     )

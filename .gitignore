@@ -219,10 +219,32 @@ __marimo__/
 *.joblib
 *.model
 *.log
-mlruns/ 
+mlruns/
 __pycache__/
 *.pyc
-mlruns/
 POETRY_GUIDE.md
 SOLUTION_SUMMARY.md
 test_pipeline.py
+
+# Data files
+src/data/
+
+# Model artifacts
+models/
+
+# CatBoost training cache
+catboost_info/
+notebooks/catboost_info/
+
+# Optuna studies
+optuna_studies/
+
+# Logs directory
+logs/
+
+# Reports - images (keep JSON reports)
+reports/*.png
+
+# OS files
+.DS_Store
+Thumbs.db

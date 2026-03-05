@@ -102,7 +102,10 @@ class BatchPredictionRequest(BaseModel):
     """Requisição de predição em lote para múltiplos clientes."""
 
     customers: list[PredictionRequest] = Field(
-        ..., min_length=1, max_length=API_BATCH_MAX_SIZE, description="List of customers for batch prediction"
+        ...,
+        min_length=1,
+        max_length=API_BATCH_MAX_SIZE,
+        description="List of customers for batch prediction",
     )
 
 

@@ -111,13 +111,18 @@ _METRICS_KEY_MAP = {
     "f1-score": "f1_score",
     "f1": "f1_score",
     "f1_optimal": "f1_score",
+    "cv_f1_mean": "f1_score",
     "ROC-AUC": "roc_auc",
     "roc-auc": "roc_auc",
     "AUC": "roc_auc",
     "auc": "roc_auc",
+    "cv_roc_auc_mean": "roc_auc",
     "Precision": "precision",
     "Recall": "recall",
     "Accuracy": "accuracy",
+    "AUPRC": "auprc",
+    "average_precision": "auprc",
+    "pr_auc": "auprc",
 }
 
 

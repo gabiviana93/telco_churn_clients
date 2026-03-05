@@ -10,7 +10,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 
 [tool.poetry.dependencies]
@@ -86,7 +86,7 @@ source = ["src"]
 omit = ["*/tests/*", "*/test_*.py", "*/__pycache__/*"]
 
 [tool.coverage.report]
-fail_under = 40  # Atual: ~44%. Aumentar conforme testes forem adicionados.
+fail_under = 70
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
@@ -103,7 +103,7 @@ exclude_lines = [
 # =============================================================================
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -134,7 +134,7 @@ skip = [".git", ".venv", "mlruns", "__pycache__"]
 # =============================================================================
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 exclude = [
     ".git",
     ".venv",

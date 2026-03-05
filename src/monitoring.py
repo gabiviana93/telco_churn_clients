@@ -75,7 +75,9 @@ class DriftReport:
         }
 
 
-def population_stability_index(expected: np.ndarray, actual: np.ndarray, bins: int = DRIFT_PSI_BINS) -> float:
+def population_stability_index(
+    expected: np.ndarray, actual: np.ndarray, bins: int = DRIFT_PSI_BINS
+) -> float:
     """
     Calcula o Population Stability Index (PSI).
 

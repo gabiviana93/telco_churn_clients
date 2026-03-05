@@ -266,14 +266,8 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
     def _create_contract_features(self, df):
         """Cria features relacionadas ao tipo de contrato."""
         if "Contract" in df.columns:
-            df["is_monthly_contract"] = (
-                df["Contract"] == CONTRACT_VALUES[0]
-            ).astype(int)
-            df["long_term_contract"] = (
-                df["Contract"]
-                .isin(CONTRACT_VALUES[1:])
-                .astype(int)
-            )
+            df["is_monthly_contract"] = (df["Contract"] == CONTRACT_VALUES[0]).astype(int)
+            df["long_term_contract"] = df["Contract"].isin(CONTRACT_VALUES[1:]).astype(int)
 
         return df
 
@@ -387,13 +381,22 @@ class AdvancedFeatureEngineer(FeatureEngineer):
 
         # Identificar colunas de serviço (via config)
         self.service_cols_ = SERVICE_COLS_ALL or [
-            "PhoneService", "MultipleLines", "InternetService",
-            "OnlineSecurity", "OnlineBackup", "DeviceProtection",
-            "TechSupport", "StreamingTV", "StreamingMovies",
+            "PhoneService",
+            "MultipleLines",
+            "InternetService",
+            "OnlineSecurity",
+            "OnlineBackup",
+            "DeviceProtection",
+            "TechSupport",
+            "StreamingTV",
+            "StreamingMovies",
         ]
         self.streaming_cols_ = SERVICE_COLS_STREAMING or ["StreamingTV", "StreamingMovies"]
         self.security_cols_ = SERVICE_COLS_SECURITY or [
-            "OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport",
+            "OnlineSecurity",
+            "OnlineBackup",
+            "DeviceProtection",
+            "TechSupport",
         ]
 
         # Risk scores por categoria
@@ -550,7 +553,9 @@ class AdvancedFeatureEngineer(FeatureEngineer):
             risk_score += (df["PaperlessBilling"] == "Yes").astype(int) * w["paperless_billing"]
 
         if "PaymentMethod" in df.columns:
-            risk_score += (df["PaymentMethod"] == "Electronic check").astype(int) * w["electronic_check"]
+            risk_score += (df["PaymentMethod"] == "Electronic check").astype(int) * w[
+                "electronic_check"
+            ]
 
         df["churn_risk_score"] = risk_score
         df["high_risk_flag"] = (risk_score >= FE_RISK_SCORE_HIGH).astype(int)

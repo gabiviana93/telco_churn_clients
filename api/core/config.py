@@ -38,11 +38,14 @@ class Settings(BaseSettings):
 
     # Configurações da API (padrões de src.config)
     API_TITLE: str = API_TITLE
-    API_DESCRIPTION: str = _api_config.get("description", """
+    API_DESCRIPTION: str = _api_config.get(
+        "description",
+        """
     **Customer Churn Prediction API**
 
     Machine Learning API for predicting customer churn in telecommunications.
-    """)
+    """,
+    )
     API_VERSION: str = API_VERSION
     DEBUG: bool = _api_config.get("debug", False)
 

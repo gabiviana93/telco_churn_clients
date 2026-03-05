@@ -12,12 +12,7 @@ from fastapi.responses import JSONResponse
 
 from api.core.config import settings
 from api.core.logging import get_logger
-from api.schemas.prediction import (
-    HealthResponse,
-    HealthStatus,
-    ModelInfo,
-    ModelMetrics,
-)
+from api.schemas.prediction import HealthResponse, HealthStatus, ModelInfo, ModelMetrics
 from api.services.model_service import ModelService, get_model_service
 
 logger = get_logger(__name__)
@@ -54,7 +49,9 @@ async def health_check(model_service: ModelService = Depends(get_model_service))
 
 
 @router.get(
-    "/health/live", summary="Probe de Liveness", description="Endpoint de probe de liveness para Kubernetes."
+    "/health/live",
+    summary="Probe de Liveness",
+    description="Endpoint de probe de liveness para Kubernetes.",
 )
 async def liveness():
     """Verificação simples de liveness para Kubernetes."""
@@ -62,7 +59,9 @@ async def liveness():
 
 
 @router.get(
-    "/health/ready", summary="Probe de Readiness", description="Endpoint de probe de readiness para Kubernetes."
+    "/health/ready",
+    summary="Probe de Readiness",
+    description="Endpoint de probe de readiness para Kubernetes.",
 )
 async def readiness(model_service: ModelService = Depends(get_model_service)):
     """Verificação de readiness - confirma que o modelo está carregado."""

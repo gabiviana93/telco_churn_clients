@@ -95,7 +95,7 @@ async def predict_single(
                 "error_code": "PREDICTION_ERROR",
                 "message": f"Failed to make prediction: {str(e)}",
             },
-        )
+        ) from e
 
 
 @router.post(
@@ -145,7 +145,7 @@ async def predict_batch(
         results: list[PredictionResult] = []
         high_risk_count = 0
 
-        for i, (pred, prob, cust_id) in enumerate(
+        for _i, (pred, prob, cust_id) in enumerate(
             zip(predictions, probabilities, customer_ids, strict=False)
         ):
             prediction = int(pred)
@@ -191,4 +191,4 @@ async def predict_batch(
                 "error_code": "BATCH_PREDICTION_ERROR",
                 "message": f"Failed to make batch prediction: {str(e)}",
             },
-        )
+        ) from e

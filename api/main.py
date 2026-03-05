@@ -12,7 +12,7 @@ Esta API fornece:
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -38,9 +38,7 @@ async def lifespan(app: FastAPI):
     """
     # Inicialização
     logger.info(
-        "Starting Customer Churn Prediction API",
-        version=settings.API_VERSION,
-        debug=settings.DEBUG
+        "Starting Customer Churn Prediction API", version=settings.API_VERSION, debug=settings.DEBUG
     )
 
     # Garantir que o modelo está carregado
@@ -65,19 +63,10 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     openapi_tags=[
-        {
-            "name": "Predictions",
-            "description": "Customer churn prediction endpoints"
-        },
-        {
-            "name": "Data Drift",
-            "description": "Data drift detection and monitoring"
-        },
-        {
-            "name": "Health & Monitoring",
-            "description": "API health checks and model monitoring"
-        }
-    ]
+        {"name": "Predictions", "description": "Customer churn prediction endpoints"},
+        {"name": "Data Drift", "description": "Data drift detection and monitoring"},
+        {"name": "Health & Monitoring", "description": "API health checks and model monitoring"},
+    ],
 )
 
 
@@ -106,11 +95,7 @@ async def root():
         "name": settings.API_TITLE,
         "version": settings.API_VERSION,
         "status": "running",
-        "documentation": {
-            "swagger": "/docs",
-            "redoc": "/redoc",
-            "openapi": "/openapi.json"
-        },
+        "documentation": {"swagger": "/docs", "redoc": "/redoc", "openapi": "/openapi.json"},
         "endpoints": {
             "predict": "/predict/",
             "batch_predict": "/predict/batch",
@@ -118,8 +103,8 @@ async def root():
             "drift_status": "/drift/status",
             "health": "/health",
             "model_info": "/model/info",
-            "feature_importance": "/interpret/feature-importance"
-        }
+            "feature_importance": "/interpret/feature-importance",
+        },
     }
 
 
@@ -128,10 +113,7 @@ async def root():
 async def global_exception_handler(request: Request, exc: Exception):
     """Trata exceções não capturadas."""
     logger.error(
-        "Unhandled exception",
-        error=str(exc),
-        path=request.url.path,
-        method=request.method
+        "Unhandled exception", error=str(exc), path=request.url.path, method=request.method
     )
 
     return JSONResponse(
@@ -140,8 +122,8 @@ async def global_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error_code": "INTERNAL_ERROR",
             "message": "An unexpected error occurred",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
     )
 
 
@@ -153,5 +135,5 @@ if __name__ == "__main__":
         port=settings.PORT,
         reload=settings.DEBUG,
         workers=1 if settings.DEBUG else settings.WORKERS,
-        log_level=settings.LOG_LEVEL.lower()
+        log_level=settings.LOG_LEVEL.lower(),
     )

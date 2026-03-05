@@ -24,11 +24,25 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 from joblib import dump, load
-from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 
-from src.config import N_SPLITS, RANDOM_STATE, STEP_MODEL, STEP_PREPROCESSING, ModelConfig, create_model
+from src.config import (
+    N_SPLITS,
+    RANDOM_STATE,
+    STEP_MODEL,
+    STEP_PREPROCESSING,
+    ModelConfig,
+    create_model,
+)
 from src.logger import setup_logger
 from src.preprocessing import build_preprocessor
 from src.utils import auto_detect_features
@@ -219,6 +233,8 @@ class ChurnPipeline:
             "roc_auc": roc_auc_score(y, y_proba),
             "precision": precision_score(y, y_pred),
             "recall": recall_score(y, y_pred),
+            "accuracy": accuracy_score(y, y_pred),
+            "auprc": average_precision_score(y, y_proba),
             "threshold": threshold,
         }
 

@@ -12,6 +12,7 @@ import mlflow
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     classification_report,
     confusion_matrix,
     f1_score,
@@ -26,10 +27,7 @@ logger = setup_logger(__name__)
 
 
 def evaluate(
-    model,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    log_to_mlflow: bool = True
+    model, X_test: pd.DataFrame, y_test: pd.Series, log_to_mlflow: bool = True
 ) -> dict[str, Any]:
     """
     Avalia performance do modelo nos dados de teste.
@@ -58,6 +56,7 @@ def evaluate(
     precision = precision_score(y_test, preds, zero_division=0)
     recall = recall_score(y_test, preds, zero_division=0)
     f1 = f1_score(y_test, preds, zero_division=0)
+    auprc = average_precision_score(y_test, proba)
 
     # Relatório de classificação
     report = classification_report(y_test, preds, output_dict=True)
@@ -72,37 +71,39 @@ def evaluate(
         mlflow.log_metric("precision", precision)
         mlflow.log_metric("recall", recall)
         mlflow.log_metric("f1_score", f1)
+        mlflow.log_metric("auprc", auprc)
 
         # Registrar métricas por classe
         metrics_to_log = {}
-        for class_label in ['0', '1']:
+        for class_label in ["0", "1"]:
             if class_label in report:
-                for metric_name in ['precision', 'recall', 'f1-score']:
+                for metric_name in ["precision", "recall", "f1-score"]:
                     key = f"class_{class_label}_{metric_name.replace('-', '_')}"
                     metrics_to_log[key] = report[class_label][metric_name]
 
         # Registrar métricas agregadas
-        if 'macro avg' in report:
-            for metric_name in ['precision', 'recall', 'f1-score']:
+        if "macro avg" in report:
+            for metric_name in ["precision", "recall", "f1-score"]:
                 key = f"macro_avg_{metric_name.replace('-', '_')}"
-                metrics_to_log[key] = report['macro avg'][metric_name]
+                metrics_to_log[key] = report["macro avg"][metric_name]
 
-        if 'weighted avg' in report:
-            for metric_name in ['precision', 'recall', 'f1-score']:
+        if "weighted avg" in report:
+            for metric_name in ["precision", "recall", "f1-score"]:
                 key = f"weighted_avg_{metric_name.replace('-', '_')}"
-                metrics_to_log[key] = report['weighted avg'][metric_name]
+                metrics_to_log[key] = report["weighted avg"][metric_name]
 
         mlflow.log_metrics(metrics_to_log)
 
     logger.info(
         "Evaluation completed",
         extra={
-            'roc_auc': round(roc_auc, 4),
-            'accuracy': round(accuracy, 4),
-            'precision': round(precision, 4),
-            'recall': round(recall, 4),
-            'f1_score': round(f1, 4),
-        }
+            "roc_auc": round(roc_auc, 4),
+            "accuracy": round(accuracy, 4),
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1_score": round(f1, 4),
+            "auprc": round(auprc, 4),
+        },
     )
 
     return {
@@ -111,6 +112,7 @@ def evaluate(
         "precision": precision,
         "recall": recall,
         "f1_score": f1,
+        "auprc": auprc,
         "confusion_matrix": cm.tolist(),
         "classification_report": report,
     }

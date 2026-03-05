@@ -110,7 +110,6 @@ class OptimizationConfig:
     optimize_threshold: bool = DEFAULT_OPTIMIZE_THRESHOLD
 
 
-
 @dataclass
 class OptimizationResult:
     """Resultados da otimização de hiperparâmetros.

@@ -14,6 +14,8 @@ Uso:
     poetry run streamlit run app/dashboard.py
 """
 
+# Garante que o diretório raiz do projeto esteja no sys.path
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 # Configuração da página
 st.set_page_config(
@@ -73,13 +79,14 @@ st.markdown(
 
 
 # Usa config centralizado
-from src.config import (
+from src.config import (  # noqa: E402
     API_HOST,
     API_PORT,
     DATA_DIR_RAW,
     FILENAME,
     INTERPRET_TOP_FEATURES,
     MODEL_PATH,
+    REPORTS_DIR,
     RISK_THRESHOLD_HIGH,
     RISK_THRESHOLD_LOW,
     SHAP_SAMPLE_SIZE,
@@ -88,8 +95,8 @@ from src.config import (
     get_config,
     list_available_models,
 )
-from src.inference import load_model_package
-from src.utils import (
+from src.inference import load_model_package  # noqa: E402
+from src.utils import (  # noqa: E402
     classify_risk,
     convert_target_to_binary,
     extract_model_components,
@@ -202,20 +209,77 @@ def check_api_health() -> bool:
 def predict_via_api(customer_data: dict) -> dict | None:
     """Realiza predição via API."""
     try:
-        # API espera customer_id e features
         payload = {"customer_id": "dashboard-user", "features": customer_data}
         response = requests.post(f"{API_URL}/predict/", json=payload, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # Extrai dados de predição da resposta da API
             prediction = data.get("prediction", {})
             return {
                 "prediction": prediction.get("churn_prediction", 0),
                 "probability": prediction.get("churn_probability", 0.0),
                 "churn_risk": prediction.get("churn_risk", "UNKNOWN"),
             }
+        else:
+            st.error(f"API retornou status {response.status_code}: {response.text[:200]}")
     except Exception as e:
         st.error(f"API Error: {e}")
+    return None
+
+
+def explain_via_api(customer_data: dict, customer_id: str = "dashboard-user") -> dict | None:
+    """Obtém explicação SHAP via API."""
+    try:
+        payload = {"customer_id": customer_id, "features": customer_data}
+        response = requests.post(f"{API_URL}/interpret/shap/explain", json=payload, timeout=30)
+        if response.status_code == 200:
+            return response.json().get("explanation")
+    except Exception:
+        pass
+    return None
+
+
+def get_feature_importance_via_api(top_n: int = 20) -> list[dict] | None:
+    """Obtém importância de features via API."""
+    try:
+        response = requests.get(
+            f"{API_URL}/interpret/feature-importance", params={"top_n": top_n}, timeout=10
+        )
+        if response.status_code == 200:
+            return response.json().get("feature_importances", [])
+    except Exception:
+        pass
+    return None
+
+
+def get_global_shap_via_api(sample_size: int = 100, top_n: int = 20) -> dict | None:
+    """Obtém resumo SHAP global via API."""
+    try:
+        response = requests.get(
+            f"{API_URL}/interpret/shap/global",
+            params={"sample_size": sample_size, "top_n": top_n},
+            timeout=60,
+        )
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
+    return None
+
+
+def detect_drift_via_api(production_df: pd.DataFrame) -> dict | None:
+    """Envia dados de produção para detecção de drift via API."""
+    try:
+        import io
+
+        csv_buffer = io.StringIO()
+        production_df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+        files = {"file": ("production_data.csv", csv_buffer, "text/csv")}
+        response = requests.post(f"{API_URL}/drift/detect", files=files, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
     return None
 
 
@@ -359,33 +423,60 @@ def render_sidebar():
     return page
 
 
+def _get_active_model_name() -> str:
+    """Retorna o nome legível do modelo ativo."""
+    if "selected_model_name" in st.session_state:
+        return st.session_state.selected_model_name
+    return Path(MODEL_PATH).stem
+
+
+def _load_metrics_from_report() -> dict:
+    """Carrega métricas de reports/metrics.json ou fallback do pacote do modelo."""
+    import json
+
+    metrics_json_path = REPORTS_DIR / "metrics.json"
+    if metrics_json_path.exists():
+        with open(metrics_json_path) as f:
+            return normalize_metrics_keys(json.load(f))
+
+    package = load_model()
+    if isinstance(package, dict):
+        raw = package.get("metrics", {})
+        if not raw:
+            meta = package.get("metadata", {})
+            raw = meta.get("metrics", {}) if isinstance(meta, dict) else {}
+        return normalize_metrics_keys(raw)
+    return {}
+
+
 def render_home():
     """Renderiza página inicial."""
     st.markdown('<h1 class="main-header">🎯 Customer Churn Prediction</h1>', unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(
+        """
     ### Bem-vindo ao Dashboard de Predição de Churn
 
     Este sistema utiliza **Machine Learning** para prever quais clientes têm maior
     probabilidade de cancelar seus serviços.
-    """)
+    """
+    )
 
-    # Métricas do modelo carregado
+    # Modelo ativo
+    model_name = _get_active_model_name()
+    st.info(f"📦 **Modelo ativo:** {model_name}")
+
+    # Métricas do modelo
+    metrics = _load_metrics_from_report()
     package = load_model()
-    metrics = {}
-    if isinstance(package, dict):
-        metrics = package.get("metrics", {})
-        if not metrics:
-            meta = package.get("metadata", {})
-            metrics = meta.get("metrics", {}) if isinstance(meta, dict) else {}
-        metrics = normalize_metrics_keys(metrics)
 
     f1 = metrics.get("f1_score")
     auc = metrics.get("roc_auc")
     prec = metrics.get("precision")
     rec = metrics.get("recall")
+    auprc = metrics.get("auprc")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric(label="F1-Score", value=f"{f1:.0%}" if f1 else "N/A")
     with col2:
@@ -394,6 +485,8 @@ def render_home():
         st.metric(label="Precision", value=f"{prec:.0%}" if prec else "N/A")
     with col4:
         st.metric(label="Recall", value=f"{rec:.0%}" if rec else "N/A")
+    with col5:
+        st.metric(label="AUPRC", value=f"{auprc:.0%}" if auprc else "N/A")
 
     st.markdown("---")
 
@@ -416,22 +509,26 @@ def render_home():
             inner = getattr(package.pipeline, "named_steps", {}).get(STEP_MODEL)
             model_algo = type(inner).__name__ if inner else "N/A"
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
         - **Modelo**: {model_algo}
         - **Balanceamento**: SMOTETomek (configurável)
         - **Otimização**: Optuna TPE Sampler
-        """)
+        """
+        )
 
     with col2:
         st.markdown("### 📊 Dataset")
         df = load_sample_data()
         if df is not None:
             n_features = len([c for c in df.columns if c != "Churn"])
-            st.markdown(f"""
+            st.markdown(
+                f"""
             - **Total de clientes**: {len(df):,}
             - **Taxa de churn**: {df['Churn'].mean():.1%}
             - **Features originais**: {n_features}
-            """)
+            """
+            )
 
     # Gráfico de Distribuição de Churn
     st.markdown("---")
@@ -465,14 +562,29 @@ def render_home():
 def render_shap_explanation(customer_data: dict[str, Any]) -> None:
     """
     Renderiza a explicação SHAP para um cliente específico.
-
-    Args:
-        customer_data: Dictionary with customer features
+    Usa a API quando disponível, senão calcula localmente.
     """
+    # Tenta via API primeiro
+    if check_api_health():
+        with st.spinner("Obtendo explicação SHAP via API..."):
+            explanation = explain_via_api(customer_data)
+        if explanation is not None:
+            shap_values_list = explanation.get("shap_values", [])
+            feature_names = [sv["feature"] for sv in shap_values_list]
+            shap_values = np.array([sv["shap_value"] for sv in shap_values_list])
+
+            _render_shap_chart(feature_names, shap_values)
+            return
+
+    # Fallback: calcula localmente
+    _render_shap_local(customer_data)
+
+
+def _render_shap_local(customer_data: dict[str, Any]) -> None:
+    """Calcula e renderiza explicação SHAP localmente."""
     try:
         import shap
 
-        # Obtém o pacote do modelo
         if "selected_model_path" in st.session_state:
             package = load_model_by_path(st.session_state.selected_model_path)
         else:
@@ -482,197 +594,148 @@ def render_shap_explanation(customer_data: dict[str, Any]) -> None:
             st.warning("Modelo não carregado para análise SHAP.")
             return
 
-        # Extrai modelo e preprocessador
         if isinstance(package, dict):
             model = package.get("model")
         else:
             model = package
 
-        # Obtém o modelo de árvore subjacente do pipeline
         tree_model, preprocessor, feature_engineering = extract_model_components(model)
 
         if tree_model is None:
             st.warning("Não foi possível extrair o modelo para análise SHAP.")
             return
 
-        # Verifica se é um modelo de árvore suportado
-        model_type = type(tree_model).__name__
-        supported_types = [
-            "XGBClassifier",
-            "XGBRegressor",
-            "LGBMClassifier",
-            "LGBMRegressor",
-            "CatBoostClassifier",
-            "CatBoostRegressor",
-            "RandomForestClassifier",
-            "RandomForestRegressor",
-            "GradientBoostingClassifier",
-            "GradientBoostingRegressor",
-        ]
-
-        if not any(supported in model_type for supported in supported_types):
-            st.warning(f"Tipo de modelo '{model_type}' não suportado pelo TreeExplainer.")
-            return
-
-        # Obtém número esperado de features do modelo
-        expected_features = None
-        if hasattr(tree_model, "n_features_in_"):
-            expected_features = tree_model.n_features_in_
-        elif hasattr(tree_model, "n_features_"):
-            expected_features = tree_model.n_features_
-
-        # Prepara dados do cliente
         df = pd.DataFrame([customer_data])
 
-        # Aplica engenharia de features se disponível
         if feature_engineering is not None:
             try:
                 df = feature_engineering.transform(df)
-            except Exception as e:
-                st.warning(f"Feature engineering falhou: {e}")
+            except Exception:
+                pass
 
-        # Transforma dados com preprocessador
         if preprocessor is not None:
             try:
                 X_transformed = preprocessor.transform(df)
                 feature_names = _get_preprocessor_feature_names(
                     preprocessor, X_transformed.shape[1]
                 )
-            except Exception as e:
-                st.warning(f"Preprocessor falhou: {e}")
+            except Exception:
                 X_transformed = _encode_categoricals(df)
                 feature_names = list(df.columns)
         else:
             X_transformed = _encode_categoricals(df)
             feature_names = list(df.columns)
 
-        # Valida se contagem de features corresponde às expectativas do modelo
-        actual_features = (
-            X_transformed.shape[1] if hasattr(X_transformed, "shape") else len(X_transformed[0])
-        )
-        if expected_features is not None and actual_features != expected_features:
-            st.warning(
-                f"Este modelo foi treinado com {expected_features} features transformadas, "
-                f"mas os dados fornecidos têm {actual_features}. "
-                f"Selecione um modelo que inclua o preprocessador (ex: model.joblib ou churn_model_lightgbm.joblib)."
-            )
-            return
-
-        # Calcula valores SHAP
-        with st.spinner("Calculando explicação SHAP..."):
+        with st.spinner("Calculando explicação SHAP localmente..."):
             explainer = shap.TreeExplainer(tree_model)
             shap_values = explainer.shap_values(X_transformed)
 
-            # Trata classificação binária
             if isinstance(shap_values, list):
-                shap_values = shap_values[1]  # Use positive class (churn)
+                shap_values = shap_values[1]
 
-            # Garante array 1D para predição individual
             if shap_values.ndim > 1:
                 shap_values = shap_values[0]
 
-            # Obtém valor base
-            if hasattr(explainer, "expected_value"):
-                base_value = explainer.expected_value
-                if isinstance(base_value, (list, np.ndarray)):
-                    base_value = base_value[1] if len(base_value) > 1 else base_value[0]
-            else:
-                base_value = 0.5
-
-        # Garante que nomes de features correspondem aos valores SHAP
         if len(feature_names) != len(shap_values):
             feature_names = [f"Feature {i}" for i in range(len(shap_values))]
 
-        # Cria DataFrame com valores SHAP
-        shap_df = pd.DataFrame(
-            {"Feature": feature_names, "SHAP Value": shap_values, "Abs SHAP": np.abs(shap_values)}
-        ).sort_values("Abs SHAP", ascending=False)
-
-        # Exibe gráfico tipo waterfall SHAP
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            # Impacto das features principais
-            top_features = shap_df.head(INTERPRET_TOP_FEATURES).copy()
-            top_features = top_features.sort_values("SHAP Value", ascending=True)
-
-            # Cor baseada em impacto positivo/negativo
-            colors = ["#ff4b4b" if v > 0 else "#00cc66" for v in top_features["SHAP Value"]]
-
-            fig = go.Figure()
-            fig.add_trace(
-                go.Bar(
-                    y=top_features["Feature"],
-                    x=top_features["SHAP Value"],
-                    orientation="h",
-                    marker_color=colors,
-                    text=[f"{v:+.3f}" for v in top_features["SHAP Value"]],
-                    textposition="outside",
-                )
-            )
-
-            fig.update_layout(
-                title="Top 10 Fatores que Influenciaram a Predição",
-                xaxis_title="Impacto SHAP (+ aumenta chance de churn)",
-                yaxis_title="",
-                height=400,
-                showlegend=False,
-            )
-
-            # Adiciona linha zero
-            fig.add_vline(x=0, line_dash="dash", line_color="gray")
-
-            st.plotly_chart(fig, width="stretch")
-
-        with col2:
-            st.markdown("#### 📖 Interpretação")
-
-            # Mostra fatores positivos e negativos principais
-            positive_factors = shap_df[shap_df["SHAP Value"] > 0].head(VIZ_TOP_FACTORS)
-            negative_factors = shap_df[shap_df["SHAP Value"] < 0].head(VIZ_TOP_FACTORS)
-
-            if len(positive_factors) > 0:
-                st.markdown("**Fatores que AUMENTAM risco de churn:**")
-                for _, row in positive_factors.iterrows():
-                    st.markdown(f"- 🔴 **{row['Feature']}**: +{row['SHAP Value']:.3f}")
-
-            if len(negative_factors) > 0:
-                st.markdown("**Fatores que DIMINUEM risco de churn:**")
-                for _, row in negative_factors.iterrows():
-                    st.markdown(f"- 🟢 **{row['Feature']}**: {row['SHAP Value']:.3f}")
-
-            st.markdown("---")
-            st.info("""
-            **Como ler:**
-            - 🔴 Valores positivos → aumentam probabilidade de churn
-            - 🟢 Valores negativos → diminuem probabilidade de churn
-            - Barras maiores = maior impacto na decisão
-            """)
-
-        # Tabela detalhada
-        with st.expander("📋 Ver todos os valores SHAP"):
-            st.dataframe(
-                shap_df[["Feature", "SHAP Value"]].style.format({"SHAP Value": "{:+.4f}"}),
-                width="stretch",
-                hide_index=True,
-            )
-
-        st.success("✅ Explicação SHAP gerada com sucesso!")
+        _render_shap_chart(feature_names, shap_values)
 
     except ImportError:
         st.error("SHAP não está instalado. Execute: `poetry add shap`")
     except Exception as e:
         st.warning(f"Não foi possível gerar explicação SHAP: {e}")
-        st.info("Tente retreinar o modelo ou verificar se ele suporta SHAP.")
+
+
+def _render_shap_chart(feature_names: list[str], shap_values: np.ndarray) -> None:
+    """Renderiza gráficos SHAP a partir de nomes/valores já calculados."""
+    shap_df = pd.DataFrame(
+        {"Feature": feature_names, "SHAP Value": shap_values, "Abs SHAP": np.abs(shap_values)}
+    ).sort_values("Abs SHAP", ascending=False)
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        top_features = shap_df.head(INTERPRET_TOP_FEATURES).copy()
+        top_features = top_features.sort_values("SHAP Value", ascending=True)
+
+        colors = ["#ff4b4b" if v > 0 else "#00cc66" for v in top_features["SHAP Value"]]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                y=top_features["Feature"],
+                x=top_features["SHAP Value"],
+                orientation="h",
+                marker_color=colors,
+                text=[f"{v:+.3f}" for v in top_features["SHAP Value"]],
+                textposition="outside",
+            )
+        )
+
+        fig.update_layout(
+            title="Top 10 Fatores que Influenciaram a Predição",
+            xaxis_title="Impacto SHAP (+ aumenta chance de churn)",
+            yaxis_title="",
+            height=400,
+            showlegend=False,
+        )
+
+        # Adiciona linha zero
+        fig.add_vline(x=0, line_dash="dash", line_color="gray")
+
+        st.plotly_chart(fig, width="stretch")
+
+    with col2:
+        st.markdown("#### 📖 Interpretação")
+
+        # Mostra fatores positivos e negativos principais
+        positive_factors = shap_df[shap_df["SHAP Value"] > 0].head(VIZ_TOP_FACTORS)
+        negative_factors = shap_df[shap_df["SHAP Value"] < 0].head(VIZ_TOP_FACTORS)
+
+        if len(positive_factors) > 0:
+            st.markdown("**Fatores que AUMENTAM risco de churn:**")
+            for _, row in positive_factors.iterrows():
+                st.markdown(f"- 🔴 **{row['Feature']}**: +{row['SHAP Value']:.3f}")
+
+        if len(negative_factors) > 0:
+            st.markdown("**Fatores que DIMINUEM risco de churn:**")
+            for _, row in negative_factors.iterrows():
+                st.markdown(f"- 🟢 **{row['Feature']}**: {row['SHAP Value']:.3f}")
+
+        st.markdown("---")
+        st.info(
+            """
+        **Como ler:**
+        - 🔴 Valores positivos → aumentam probabilidade de churn
+        - 🟢 Valores negativos → diminuem probabilidade de churn
+        - Barras maiores = maior impacto na decisão
+        """
+        )
+
+    # Tabela detalhada
+    with st.expander("📋 Ver todos os valores SHAP"):
+        st.dataframe(
+            shap_df[["Feature", "SHAP Value"]].style.format({"SHAP Value": "{:+.4f}"}),
+            width="stretch",
+            hide_index=True,
+        )
+
+    st.success("✅ Explicação SHAP gerada com sucesso!")
 
 
 def render_prediction():
     """Renderiza página de predição."""
     st.markdown("## 🔮 Predição de Churn")
 
-    st.markdown("""
+    model_name = _get_active_model_name()
+    st.caption(f"📦 Modelo ativo: **{model_name}**")
+
+    st.markdown(
+        """
     Preencha os dados do cliente abaixo para obter uma predição de churn.
-    """)
+    """
+    )
 
     col1, col2, col3 = st.columns(3)
 
@@ -868,13 +931,15 @@ def render_prediction():
             # Recomendações
             if risk == "HIGH":
                 st.markdown("### 💡 Recomendações")
-                st.warning("""
+                st.warning(
+                    """
                 **Ações sugeridas para retenção:**
                 - 📞 Contato proativo do time de retenção
                 - 🎁 Oferecer desconto ou upgrade de plano
                 - 📋 Migrar para contrato anual com benefícios
                 - 🛡️ Adicionar serviços de proteção/suporte
-                """)
+                """
+                )
 
             # Explicação SHAP para esta predição específica
             st.markdown("---")
@@ -895,6 +960,9 @@ def render_performance():
     """Renderiza página de visualização de performance."""
     st.markdown("## 📈 Performance do Modelo")
 
+    model_name = _get_active_model_name()
+    st.caption(f"📦 Modelo ativo: **{model_name}**")
+
     df = load_sample_data()
     if df is None:
         st.error("Dados não encontrados.")
@@ -908,38 +976,51 @@ def render_performance():
     with tab1:
         st.markdown("### Métricas de Performance")
 
-        # Carrega métricas reais do pacote do modelo
-        package = load_model()
-        metrics = {}
-        if isinstance(package, dict):
-            metrics = package.get("metrics", {})
-            if not metrics:
-                meta = package.get("metadata", {})
-                metrics = meta.get("metrics", {}) if isinstance(meta, dict) else {}
-            metrics = normalize_metrics_keys(metrics)
+        metrics = _load_metrics_from_report()
 
         f1 = metrics.get("f1_score")
         auc = metrics.get("roc_auc")
         prec = metrics.get("precision")
         rec = metrics.get("recall")
         acc = metrics.get("accuracy")
+        auprc = metrics.get("auprc")
+        threshold = metrics.get("threshold")
 
         if not any([f1, auc, prec, rec, acc]):
             st.info(
-                "Métricas de performance não disponíveis nos metadados do modelo. "
-                "Retreine o modelo para registrar métricas."
+                "Métricas de performance não disponíveis. "
+                "Execute o pipeline para gerar reports/metrics.json."
             )
 
-        # Tabela de métricas
+        # Cards de métricas
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        with col1:
+            st.metric("F1-Score", f"{f1:.4f}" if f1 else "N/A")
+        with col2:
+            st.metric("Precision", f"{prec:.4f}" if prec else "N/A")
+        with col3:
+            st.metric("Recall", f"{rec:.4f}" if rec else "N/A")
+        with col4:
+            st.metric("AUC-ROC", f"{auc:.4f}" if auc else "N/A")
+        with col5:
+            st.metric("Accuracy", f"{acc:.4f}" if acc else "N/A")
+        with col6:
+            st.metric("AUPRC", f"{auprc:.4f}" if auprc else "N/A")
+
+        if threshold is not None:
+            st.caption(f"Threshold de classificação: {threshold}")
+
+        # Tabela detalhada
         metrics_df = pd.DataFrame(
             {
-                "Métrica": ["F1-Score", "Precision", "Recall", "AUC-ROC", "Accuracy"],
+                "Métrica": ["F1-Score", "Precision", "Recall", "AUC-ROC", "Accuracy", "AUPRC"],
                 "Valor": [
                     f"{f1:.4f}" if f1 else "N/A",
                     f"{prec:.4f}" if prec else "N/A",
                     f"{rec:.4f}" if rec else "N/A",
                     f"{auc:.4f}" if auc else "N/A",
                     f"{acc:.4f}" if acc else "N/A",
+                    f"{auprc:.4f}" if auprc else "N/A",
                 ],
                 "Descrição": [
                     "Média harmônica de Precision e Recall",
@@ -947,10 +1028,41 @@ def render_performance():
                     "Dos churns reais, quantos foram identificados",
                     "Área sob a curva ROC",
                     "Total de acertos / Total de predições",
+                    "Área sob a curva Precision-Recall",
                 ],
             }
         )
         st.dataframe(metrics_df, width="stretch", hide_index=True)
+
+        # Métricas de cross-validation (se disponíveis)
+        import json
+
+        metrics_json_path = REPORTS_DIR / "metrics.json"
+        raw_metrics = {}
+        if metrics_json_path.exists():
+            with open(metrics_json_path) as f:
+                raw_metrics = json.load(f)
+        cv_f1_std = raw_metrics.get("cv_f1_std")
+        cv_roc_std = raw_metrics.get("cv_roc_auc_std")
+        cv_f1_m = raw_metrics.get("cv_f1_mean")
+        cv_roc_m = raw_metrics.get("cv_roc_auc_mean")
+
+        if cv_f1_m is not None or cv_roc_m is not None:
+            st.markdown("---")
+            st.markdown("#### Validação Cruzada")
+            cv_col1, cv_col2 = st.columns(2)
+            with cv_col1:
+                if cv_f1_m is not None:
+                    st.metric(
+                        "CV F1-Score (média ± std)",
+                        f"{cv_f1_m:.4f} ± {cv_f1_std:.4f}" if cv_f1_std else f"{cv_f1_m:.4f}",
+                    )
+            with cv_col2:
+                if cv_roc_m is not None:
+                    st.metric(
+                        "CV ROC-AUC (média ± std)",
+                        f"{cv_roc_m:.4f} ± {cv_roc_std:.4f}" if cv_roc_std else f"{cv_roc_m:.4f}",
+                    )
 
     with tab2:
         st.markdown("### Distribuições de Features")
@@ -1042,58 +1154,32 @@ def render_interpretability():
     """Renderiza página de interpretabilidade SHAP."""
     st.markdown("## 🧠 Interpretabilidade do Modelo")
 
-    st.markdown("""
+    model_name = _get_active_model_name()
+    st.caption(f"📦 Modelo ativo: **{model_name}**")
+
+    st.markdown(
+        """
     Análise de interpretabilidade usando **SHAP (SHapley Additive exPlanations)**
     para entender como o modelo toma decisões.
-    """)
+    """
+    )
 
-    package = load_model()
-    df = load_sample_data()
+    api_online = check_api_health()
 
-    if package is None:
-        st.error("Modelo não carregado. Execute o treinamento primeiro.")
-        return
+    # =========================================================================
+    # Feature Importance
+    # =========================================================================
+    st.markdown("### 📊 Feature Importance")
 
-    if df is None:
-        st.error("Dados não encontrados.")
-        return
-
-    # Extrai modelo do pacote
-    if isinstance(package, dict):
-        model = package.get("model")
-    else:
-        model = package
-
-    try:
-        import shap
-
-        st.markdown("### 📊 Feature Importance")
-
-        # Obtém modelo de árvore do pipeline
-        tree_model, preprocessor, feature_engineering = extract_model_components(model)
-
-        if tree_model is None:
-            st.error("Não foi possível extrair o modelo para análise SHAP.")
-            return
-
-        # Importância de features
-        if hasattr(tree_model, "feature_importances_"):
-            importances = tree_model.feature_importances_
-
-            # Obtém nomes de features
-            if preprocessor is not None:
-                feature_names = _get_preprocessor_feature_names(preprocessor, len(importances))
-            else:
-                feature_names = [f"Feature {i}" for i in range(len(importances))]
-
-            # Cria DataFrame
-            importance_df = (
-                pd.DataFrame(
-                    {"Feature": feature_names[: len(importances)], "Importance": importances}
-                )
-                .sort_values("Importance", ascending=True)
-                .tail(20)
-            )
+    if api_online:
+        importances = get_feature_importance_via_api(top_n=20)
+        if importances:
+            importance_df = pd.DataFrame(
+                [
+                    {"Feature": fi["feature_name"], "Importance": fi["importance"]}
+                    for fi in importances
+                ]
+            ).sort_values("Importance", ascending=True)
 
             fig = px.bar(
                 importance_df,
@@ -1106,66 +1192,210 @@ def render_interpretability():
             )
             fig.update_layout(height=600)
             st.plotly_chart(fig, width="stretch")
+        else:
+            st.warning("Não foi possível obter importância de features da API.")
+    else:
+        _render_local_feature_importance()
 
-        # Análise SHAP
-        st.markdown("### 🔍 Análise SHAP")
+    # =========================================================================
+    # Análise SHAP Global
+    # =========================================================================
+    st.markdown("### 🔍 Análise SHAP")
 
-        with st.spinner("Calculando SHAP values... Isso pode levar alguns segundos."):
-            # Prepara dados
+    if api_online:
+        with st.spinner("Calculando SHAP values via API... Isso pode levar alguns segundos."):
+            shap_data = get_global_shap_via_api(sample_size=SHAP_SAMPLE_SIZE, top_n=15)
+
+        if shap_data:
+            mean_abs_list = shap_data.get("mean_abs_shap", [])
+            sample_sz = shap_data.get("sample_size", 0)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### Mean |SHAP Value|")
+
+                shap_df = pd.DataFrame(
+                    [
+                        {"Feature": item["feature_name"], "Mean |SHAP|": item["importance"]}
+                        for item in mean_abs_list
+                    ]
+                ).sort_values("Mean |SHAP|", ascending=True)
+
+                fig = px.bar(
+                    shap_df,
+                    y="Feature",
+                    x="Mean |SHAP|",
+                    orientation="h",
+                    title=f"Impacto Médio das Features (amostra: {sample_sz})",
+                    color="Mean |SHAP|",
+                    color_continuous_scale="Reds",
+                )
+                fig.update_layout(height=500)
+                st.plotly_chart(fig, width="stretch")
+
+            with col2:
+                st.markdown("#### Distribuição SHAP")
+                st.info(
+                    """
+                **Como interpretar:**
+                - Valores SHAP positivos → aumentam probabilidade de churn
+                - Valores SHAP negativos → diminuem probabilidade de churn
+                - Maior magnitude → maior impacto na predição
+                """
+                )
+
+                st.markdown("**Top Features:**")
+                for i, item in enumerate(mean_abs_list[:5]):
+                    st.write(f"{i+1}. **{item['feature_name']}**: {item['importance']:.4f}")
+
+            st.success("✅ Análise SHAP concluída!")
+        else:
+            st.warning("Não foi possível calcular SHAP via API.")
+    else:
+        _render_local_shap_analysis()
+
+
+def _render_local_feature_importance() -> None:
+    """Renderiza feature importance localmente."""
+    package = load_model()
+    if package is None:
+        st.error("Modelo não carregado. Execute o treinamento primeiro.")
+        return
+
+    if isinstance(package, dict):
+        model = package.get("model")
+    else:
+        model = package
+
+    tree_model, preprocessor, _ = extract_model_components(model)
+    if tree_model is None:
+        st.error("Não foi possível extrair o modelo.")
+        return
+
+    if hasattr(tree_model, "feature_importances_"):
+        importances = tree_model.feature_importances_
+        feature_names = (
+            _get_preprocessor_feature_names(preprocessor, len(importances))
+            if preprocessor
+            else [f"Feature {i}" for i in range(len(importances))]
+        )
+
+        importance_df = (
+            pd.DataFrame({"Feature": feature_names[: len(importances)], "Importance": importances})
+            .sort_values("Importance", ascending=True)
+            .tail(20)
+        )
+
+        fig = px.bar(
+            importance_df,
+            y="Feature",
+            x="Importance",
+            orientation="h",
+            title="Top 20 Features mais Importantes",
+            color="Importance",
+            color_continuous_scale="Viridis",
+        )
+        fig.update_layout(height=600)
+        st.plotly_chart(fig, width="stretch")
+    elif hasattr(tree_model, "coef_"):
+        importances = np.abs(np.ravel(tree_model.coef_))
+        feature_names = (
+            _get_preprocessor_feature_names(preprocessor, len(importances))
+            if preprocessor
+            else [f"Feature {i}" for i in range(len(importances))]
+        )
+
+        importance_df = (
+            pd.DataFrame({"Feature": feature_names[: len(importances)], "Importance": importances})
+            .sort_values("Importance", ascending=True)
+            .tail(20)
+        )
+
+        fig = px.bar(
+            importance_df,
+            y="Feature",
+            x="Importance",
+            orientation="h",
+            title="Top 20 Features mais Importantes (|coeficientes|)",
+            color="Importance",
+            color_continuous_scale="Viridis",
+        )
+        fig.update_layout(height=600)
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.warning("Feature importance não disponível para este tipo de modelo.")
+
+
+def _render_local_shap_analysis() -> None:
+    """Renderiza análise SHAP global localmente."""
+    package = load_model()
+    df = load_sample_data()
+
+    if package is None:
+        st.error("Modelo não carregado. Execute o treinamento primeiro.")
+        return
+    if df is None:
+        st.error("Dados não encontrados.")
+        return
+
+    if isinstance(package, dict):
+        model = package.get("model")
+    else:
+        model = package
+
+    try:
+        import shap
+
+        tree_model, preprocessor, feature_engineering = extract_model_components(model)
+        if tree_model is None:
+            st.error("Não foi possível extrair o modelo para análise SHAP.")
+            return
+
+        with st.spinner("Calculando SHAP values localmente... Isso pode levar alguns segundos."):
             X = df.drop(columns=["Churn", "customerID"], errors="ignore")
-
-            # Limpa dados: remove linhas com strings vazias ou converte para tipos adequados
             X = X.replace(r"^\s*$", np.nan, regex=True)
-
-            # Converte TotalCharges para numérico (problema comum)
             if "TotalCharges" in X.columns:
                 X["TotalCharges"] = pd.to_numeric(X["TotalCharges"], errors="coerce")
-
-            # Remove linhas com valores faltantes para análise SHAP
             X = X.dropna().head(SHAP_SAMPLE_SIZE)
 
-            # Aplica engenharia de features se disponível
             if feature_engineering is not None:
                 try:
                     X = feature_engineering.transform(X)
                 except Exception:
                     pass
 
-            # Transforma se necessário
             if preprocessor is not None:
                 try:
                     X_transformed = preprocessor.transform(X)
+                    feature_names = _get_preprocessor_feature_names(
+                        preprocessor, X_transformed.shape[1]
+                    )
                 except Exception:
                     X_transformed = _encode_categoricals(X)
+                    feature_names = list(X.columns)
             else:
                 X_transformed = _encode_categoricals(X)
+                feature_names = list(X.columns)
 
-            # Calcula valores SHAP
             explainer = shap.TreeExplainer(tree_model)
             shap_values = explainer.shap_values(X_transformed)
 
-            # Trata classificação binária (shap_values pode ser lista de 2 arrays)
             if isinstance(shap_values, list):
-                shap_values = shap_values[1]  # Use positive class
-
-            # Garante shap_values 2D
+                shap_values = shap_values[1]
             if shap_values.ndim == 1:
                 shap_values = shap_values.reshape(1, -1)
 
-            # Gráfico de Barras Resumo SHAP
             col1, col2 = st.columns(2)
 
             with col1:
                 st.markdown("#### Mean |SHAP Value|")
-
-                mean_shap = np.abs(shap_values).mean(axis=0)
-                # Garante mean_shap 1D
-                mean_shap = np.ravel(mean_shap)
-
-                if preprocessor is not None:
-                    feat_names = feature_names[: len(mean_shap)]
-                else:
-                    feat_names = [f"Feature {i}" for i in range(len(mean_shap))]
+                mean_shap = np.ravel(np.abs(shap_values).mean(axis=0))
+                feat_names = (
+                    feature_names[: len(mean_shap)]
+                    if preprocessor
+                    else [f"Feature {i}" for i in range(len(mean_shap))]
+                )
 
                 shap_df = (
                     pd.DataFrame({"Feature": feat_names, "Mean |SHAP|": mean_shap})
@@ -1187,14 +1417,15 @@ def render_interpretability():
 
             with col2:
                 st.markdown("#### Distribuição SHAP")
-                st.info("""
+                st.info(
+                    """
                 **Como interpretar:**
                 - Valores SHAP positivos → aumentam probabilidade de churn
                 - Valores SHAP negativos → diminuem probabilidade de churn
                 - Maior magnitude → maior impacto na predição
-                """)
+                """
+                )
 
-                # Explicação das features principais
                 st.markdown("**Top Features:**")
                 for i, (feat, val) in enumerate(
                     zip(
@@ -1218,9 +1449,11 @@ def render_mlflow():
     """Renderiza página de rastreamento MLflow."""
     st.markdown("## 📋 MLflow Experiment Tracking")
 
-    st.markdown("""
+    st.markdown(
+        """
     Visualize experimentos e métricas registrados no MLflow.
-    """)
+    """
+    )
 
     mlruns_path = Path("mlruns")
 
@@ -1300,11 +1533,13 @@ def render_model_comparison():
 
     st.markdown('<h1 class="main-header">⚖️ Comparação de Modelos</h1>', unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(
+        """
     Esta página permite comparar a performance de diferentes modelos treinados.
     Os modelos são carregados do diretório `models/` e suas métricas são extraídas
     dos metadados salvos ou do nome do arquivo.
-    """)
+    """
+    )
 
     # Obtém todos os modelos disponíveis
     available_models = get_available_models()
@@ -1368,6 +1603,7 @@ def render_model_comparison():
             precision = metrics.get("precision")
             recall = metrics.get("recall")
             accuracy = metrics.get("accuracy")
+            auprc = metrics.get("auprc")
 
             model_data.append(
                 {
@@ -1378,6 +1614,7 @@ def render_model_comparison():
                     "Precision": precision,
                     "Recall": recall,
                     "Accuracy": accuracy,
+                    "AUPRC": auprc,
                     "Tamanho (MB)": round(model_info["size_mb"], 2),
                     "Última Modificação": model_info["modified"].strftime("%Y-%m-%d %H:%M"),
                     "path": model_info["path"],
@@ -1397,7 +1634,7 @@ def render_model_comparison():
 
     # Formata métricas como porcentagens para exibição
     display_df = df.copy()
-    metric_cols = ["F1-Score", "AUC-ROC", "Precision", "Recall", "Accuracy"]
+    metric_cols = ["F1-Score", "AUC-ROC", "Precision", "Recall", "Accuracy", "AUPRC"]
 
     for col in metric_cols:
         if col in display_df.columns:
@@ -1419,7 +1656,7 @@ def render_model_comparison():
     df_with_metrics = df.dropna(subset=["F1-Score", "AUC-ROC"], how="all")
 
     if len(df_with_metrics) > 0:
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             # Comparação F1-Score
@@ -1446,6 +1683,21 @@ def render_model_comparison():
                     y="AUC-ROC",
                     color="Algoritmo",
                     title="Comparação de AUC-ROC",
+                    text_auto=".2%",
+                )
+                fig.update_layout(yaxis_tickformat=".0%")
+                st.plotly_chart(fig, width="stretch")
+
+        with col3:
+            # Comparação AUPRC
+            df_auprc = df_with_metrics.dropna(subset=["AUPRC"])
+            if len(df_auprc) > 0:
+                fig = px.bar(
+                    df_auprc,
+                    x="Nome",
+                    y="AUPRC",
+                    color="Algoritmo",
+                    title="Comparação de AUPRC",
                     text_auto=".2%",
                 )
                 fig.update_layout(yaxis_tickformat=".0%")
@@ -1480,7 +1732,7 @@ def render_model_comparison():
                 )
 
             fig.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 1], tickformat=".0%")),
+                polar={"radialaxis": {"visible": True, "range": [0, 1], "tickformat": ".0%"}},
                 showlegend=True,
                 title="Comparação Multi-Métrica",
             )
@@ -1744,36 +1996,58 @@ def render_data_drift():
         f for f in all_features if f in ref_encoded.columns and f in prod_encoded.columns
     ]
 
-    with st.spinner("Executando detec\u00e7\u00e3o de drift..."):
-        drift_report = detect_drift(
-            reference_df=ref_encoded,
-            current_df=prod_encoded,
-            features=valid_features,
-            categorical_features=categorical_features,
-        )
+    api_online = check_api_health()
 
-    report_dict = drift_report.to_dict()
+    with st.spinner("Executando detec\u00e7\u00e3o de drift..."):
+        api_report = None
+        if api_online:
+            api_report = detect_drift_via_api(production_df)
+
+        if api_report and api_report.get("success"):
+            # Usa resultado da API
+            report_dict = api_report
+            severity = api_report["overall_severity"]
+            features_checked = api_report["features_checked"]
+            features_with_drift = api_report["features_with_drift"]
+            drift_pct = api_report["drift_percentage"]
+            sev_counts = api_report.get("severity_counts", {})
+            feature_results_raw = api_report.get("features", [])
+            st.caption("Fonte: API")
+        else:
+            # Fallback local
+            drift_report = detect_drift(
+                reference_df=ref_encoded,
+                current_df=prod_encoded,
+                features=valid_features,
+                categorical_features=categorical_features,
+            )
+            report_dict = drift_report.to_dict()
+            severity = drift_report.overall_severity.value
+            features_checked = drift_report.features_checked
+            features_with_drift = drift_report.features_with_drift
+            drift_pct = (
+                drift_report.features_with_drift / drift_report.features_checked * 100
+                if drift_report.features_checked > 0
+                else 0
+            )
+            sev_counts = drift_report.severity_counts
+            feature_results_raw = report_dict.get("features", [])
+            st.caption("Fonte: an\u00e1lise local")
 
     # =========================================================================
     # Resumo Geral
     # =========================================================================
     st.markdown("### Resumo Geral")
 
-    severity = drift_report.overall_severity.value
     sev_icon = _severity_icon(severity)
     sev_color = _severity_color(severity)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Features Analisadas", drift_report.features_checked)
+        st.metric("Features Analisadas", features_checked)
     with col2:
-        st.metric("Features com Drift", drift_report.features_with_drift)
+        st.metric("Features com Drift", features_with_drift)
     with col3:
-        drift_pct = (
-            drift_report.features_with_drift / drift_report.features_checked * 100
-            if drift_report.features_checked > 0
-            else 0
-        )
         st.metric("% com Drift", f"{drift_pct:.1f}%")
     with col4:
         st.markdown(
@@ -1788,7 +2062,6 @@ def render_data_drift():
     # Distribuição de severidade
     st.markdown("---")
 
-    sev_counts = drift_report.severity_counts
     col_sev1, col_sev2 = st.columns([2, 1])
 
     with col_sev1:
@@ -1829,23 +2102,23 @@ def render_data_drift():
     st.markdown("---")
     st.markdown("### PSI por Feature")
 
-    if drift_report.feature_results:
+    if feature_results_raw:
         psi_data = pd.DataFrame(
             [
                 {
-                    "Feature": r.feature_name,
-                    "PSI": r.psi,
-                    "KS Statistic": r.ks_statistic,
-                    "KS p-value": r.ks_pvalue,
-                    "Severidade": r.severity.value.upper(),
+                    "Feature": r["name"],
+                    "PSI": r["psi"],
+                    "KS Statistic": r["ks_statistic"],
+                    "KS p-value": r["ks_pvalue"],
+                    "Severidade": r["severity"].upper(),
                 }
-                for r in drift_report.feature_results
+                for r in feature_results_raw
             ]
         )
 
         # Gráfico de barras - PSI
         fig = go.Figure()
-        colors = [_severity_color(r.severity.value) for r in drift_report.feature_results]
+        colors = [_severity_color(r["severity"]) for r in feature_results_raw]
 
         fig.add_trace(
             go.Bar(
@@ -1923,7 +2196,7 @@ def render_data_drift():
         st.markdown("---")
         st.markdown("### Compara\u00e7\u00e3o de Distribui\u00e7\u00f5es")
 
-        features_to_plot = [r.feature_name for r in drift_report.feature_results[:6]]
+        features_to_plot = [r["name"] for r in feature_results_raw[:6]]
         numeric_to_plot = [f for f in features_to_plot if f in numeric_features]
         categorical_to_plot = [f for f in features_to_plot if f in categorical_features]
 
@@ -1938,10 +2211,10 @@ def render_data_drift():
                         feat = numeric_to_plot[idx]
                         with col:
                             result = next(
-                                (r for r in drift_report.feature_results if r.feature_name == feat),
+                                (r for r in feature_results_raw if r["name"] == feat),
                                 None,
                             )
-                            title_suffix = f" (PSI={result.psi:.4f})" if result else ""
+                            title_suffix = f" (PSI={result['psi']:.4f})" if result else ""
 
                             fig = go.Figure()
                             fig.add_trace(
@@ -1971,8 +2244,8 @@ def render_data_drift():
                                 barmode="overlay",
                                 height=300,
                                 showlegend=True,
-                                legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99),
-                                margin=dict(l=40, r=20, t=40, b=40),
+                                legend={"yanchor": "top", "y": 0.99, "xanchor": "right", "x": 0.99},
+                                margin={"l": 40, "r": 20, "t": 40, "b": 40},
                             )
                             st.plotly_chart(fig, use_container_width=True)
 
@@ -1987,10 +2260,10 @@ def render_data_drift():
                         feat = categorical_to_plot[idx]
                         with col:
                             result = next(
-                                (r for r in drift_report.feature_results if r.feature_name == feat),
+                                (r for r in feature_results_raw if r["name"] == feat),
                                 None,
                             )
-                            title_suffix = f" (PSI={result.psi:.4f})" if result else ""
+                            title_suffix = f" (PSI={result['psi']:.4f})" if result else ""
 
                             ref_counts = (
                                 reference_df[feat].value_counts(normalize=True).reset_index()
@@ -2024,8 +2297,8 @@ def render_data_drift():
                             )
                             fig.update_layout(
                                 height=300,
-                                margin=dict(l=40, r=20, t=40, b=40),
-                                legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99),
+                                margin={"l": 40, "r": 20, "t": 40, "b": 40},
+                                legend={"yanchor": "top", "y": 0.99, "xanchor": "right", "x": 0.99},
                             )
                             st.plotly_chart(fig, use_container_width=True)
 
@@ -2036,9 +2309,7 @@ def render_data_drift():
         st.markdown("### Tabela Detalhada")
 
         detail_df = psi_data.copy()
-        detail_df["Drift?"] = [
-            "Sim" if r.has_drift else "N\u00e3o" for r in drift_report.feature_results
-        ]
+        detail_df["Drift?"] = ["Sim" if r["has_drift"] else "N\u00e3o" for r in feature_results_raw]
 
         def _highlight_severity(row):
             color = _severity_color(row["Severidade"].lower())
@@ -2055,21 +2326,21 @@ def render_data_drift():
         st.markdown("---")
         st.markdown("### Recomenda\u00e7\u00f5es")
 
-        if drift_report.overall_severity.value == "none":
+        if severity == "none":
             st.success(
                 "**Nenhum drift significativo detectado.**\n\n"
                 "Os dados de produ\u00e7\u00e3o est\u00e3o alinhados com os dados de treino. "
                 "Continue monitorando periodicamente."
             )
-        elif drift_report.overall_severity.value == "low":
+        elif severity == "low":
             st.info(
                 "**Drift leve detectado.**\n\n"
                 "- Monitore as features afetadas com maior frequ\u00eancia\n"
                 "- Avalie se as mudan\u00e7as refletem tend\u00eancias reais do neg\u00f3cio\n"
                 "- Retreinamento ainda n\u00e3o \u00e9 necess\u00e1rio"
             )
-        elif drift_report.overall_severity.value == "moderate":
-            drifted = [r.feature_name for r in drift_report.feature_results if r.has_drift]
+        elif severity == "moderate":
+            drifted = [r["name"] for r in feature_results_raw if r["has_drift"]]
             st.warning(
                 f"**Drift moderado detectado em {len(drifted)} feature(s).**\n\n"
                 f"**Features afetadas:** {', '.join(drifted)}\n\n"
@@ -2080,7 +2351,7 @@ def render_data_drift():
                 "- Verificar se houve mudan\u00e7as no processo de coleta de dados"
             )
         else:
-            drifted = [r.feature_name for r in drift_report.feature_results if r.has_drift]
+            drifted = [r["name"] for r in feature_results_raw if r["has_drift"]]
             st.error(
                 f"**Drift severo detectado! A\u00e7\u00e3o imediata necess\u00e1ria.**\n\n"
                 f"**Features com drift cr\u00edtico:** {', '.join(drifted)}\n\n"

@@ -174,12 +174,12 @@ def _extract_shap_values(shap_values, expected_value, *, single_instance: bool =
     """
     if isinstance(shap_values, list):
         sv = shap_values[1]
-        ev = expected_value[1] if isinstance(expected_value, (list, np.ndarray)) else expected_value
+        ev = expected_value[1] if isinstance(expected_value, list | np.ndarray) else expected_value
     else:
         sv = shap_values
         ev = (
             expected_value
-            if not isinstance(expected_value, (list, np.ndarray))
+            if not isinstance(expected_value, list | np.ndarray)
             else expected_value[0]
         )
 
@@ -201,6 +201,19 @@ def _transform_and_get_names(preprocessor, df: pd.DataFrame) -> tuple:
         X_transformed = df.values
         feature_names = list(df.columns)
     return X_transformed, feature_names
+
+
+def _load_background_sample(preprocessor, n: int = 100) -> np.ndarray:
+    """Carrega amostra de background dos dados de referência para explainers não-tree."""
+    data_path = DATA_DIR_RAW / FILENAME
+    df = pd.read_csv(data_path)
+    df = df.drop(columns=[ID_COL, TARGET], errors="ignore")
+    if "TotalCharges" in df.columns:
+        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+    df = df.dropna()
+    df = df.sample(n=min(n, len(df)), random_state=RANDOM_STATE)
+    X, _ = _transform_and_get_names(preprocessor, df)
+    return X
 
 
 # ============================================================================
@@ -255,7 +268,7 @@ async def get_feature_importance(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get feature importance: {str(e)}",
-        )
+        ) from e
 
 
 @router.post(
@@ -274,11 +287,11 @@ async def explain_prediction(
 ) -> ShapExplanationResponse:
     """Explica uma predição individual usando valores SHAP."""
     try:
-        import shap
-    except ImportError:
+        import shap  # noqa: F401
+    except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="SHAP library not installed"
-        )
+        ) from exc
 
     logger.info("Generating SHAP explanation")
 
@@ -293,8 +306,13 @@ async def explain_prediction(
         model, preprocessor = _extract_model_and_preprocessor(model_service)
         X_transformed, feature_names = _transform_and_get_names(preprocessor, df)
 
+        # For non-tree models, load background sample from reference data
+        X_background = None
+        if not _is_tree_model(model):
+            X_background = _load_background_sample(preprocessor, n=100)
+
         # Create appropriate SHAP explainer for the model type
-        explainer = _create_shap_explainer(model, X_background=X_transformed)
+        explainer = _create_shap_explainer(model, X_background=X_background)
         shap_values = explainer.shap_values(X_transformed)
 
         # Normalize SHAP output to positive class
@@ -335,17 +353,17 @@ async def explain_prediction(
 
         return ShapExplanationResponse(success=True, explanation=explanation)
 
-    except ImportError:
+    except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="SHAP requires additional dependencies",
-        )
+        ) from exc
     except Exception as e:
         logger.error("SHAP explanation failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"SHAP explanation failed: {str(e)}",
-        )
+        ) from e
 
 
 @router.get(
@@ -361,11 +379,11 @@ async def get_global_shap(
 ) -> GlobalShapResponse:
     """Obtém estatísticas resumidas SHAP globais."""
     try:
-        import shap
-    except ImportError:
+        import shap  # noqa: F401
+    except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="SHAP library not installed"
-        )
+        ) from exc
 
     logger.info("Calculating global SHAP summary", sample_size=sample_size)
 
@@ -419,4 +437,4 @@ async def get_global_shap(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Global SHAP calculation failed: {str(e)}",
-        )
+        ) from e
