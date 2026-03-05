@@ -1,42 +1,58 @@
 import json
+
 import mlflow
 import pandas as pd
-from src.config import *
+
+from src.config import (
+    DATA_DIR_RAW,
+    FILENAME,
+    ID_COL,
+    MLFLOW_EXPERIMENT,
+    MLFLOW_TRACKING_URI,
+    MODELS_DIR,
+    REPORTS_DIR,
+    TARGET,
+)
+from src.pipeline import ChurnPipeline
 from src.preprocessing import split_data
-from src.features import build_preprocessor
-from src.train import train_model, save_model
-from src.evaluate import evaluate
+
 
 def main():
-    # Configurar o tracking URI do MLflow para garantir que salve no diretório correto
+    # Configurar MLflow
     mlflow.set_tracking_uri(f"file://{MLFLOW_TRACKING_URI}")
-    
-    # Configurar o experimento MLflow
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
-    
-    # Iniciar uma run do MLflow
+
     with mlflow.start_run():
-        df = pd.read_csv("data/processed/data.csv")
+        # 1. Carregar dados
+        df = pd.read_csv(DATA_DIR_RAW / FILENAME)
+        df = df.drop(columns=[ID_COL])
 
-        num_features = df.select_dtypes(include="number").columns.drop(TARGET)
-        cat_features = df.select_dtypes(include="object").columns
+        # 2. Split treino/teste
+        X_train, X_test, y_train, y_test = split_data(df, TARGET)
 
-        X_train, X_test, y_train, y_test = split_data(
-            df, TARGET, TEST_SIZE, RANDOM_STATE
-        )
+        # 3. Treinar pipeline (com cross-validation)
+        pipeline = ChurnPipeline()
+        pipeline.fit(X_train, y_train, validate=True)
 
-        preprocessor = build_preprocessor(num_features, cat_features)
-        pipeline = train_model(preprocessor)
+        # 4. Avaliar no conjunto de teste
+        metrics = pipeline.evaluate(X_test, y_test)
 
-        pipeline.fit(X_train, y_train)
+        # Adicionar métricas de CV ao resultado
+        metrics.update(pipeline.metrics)
 
-        metrics = evaluate(pipeline, X_test, y_test)
+        # Logar métricas no MLflow
+        mlflow.log_metrics(metrics)
 
-        with open("reports/metrics.json", "w") as f:
+        # 5. Salvar métricas em JSON
+        with open(REPORTS_DIR / "metrics.json", "w") as f:
             json.dump(metrics, f, indent=4)
 
-        # Passar um exemplo do X_test para o save_model registrar a signature
-        save_model(pipeline, X_example=X_test)
+        # 6. Salvar modelo
+        model_path = MODELS_DIR / "model.joblib"
+        pipeline.save(model_path)
+
+        print(f"Pipeline concluído. Métricas: {metrics}")
+
 
 if __name__ == "__main__":
     main()
