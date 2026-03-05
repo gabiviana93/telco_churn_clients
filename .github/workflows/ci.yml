@@ -14,19 +14,16 @@ jobs:
   quality-checks:
     name: Verificações de Qualidade
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.9', '3.10', '3.11']
     
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12'
       
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
@@ -39,9 +36,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-${{ matrix.python-version }}-
+            ${{ runner.os }}-poetry-3.12-
       
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
@@ -81,17 +78,14 @@ jobs:
   unit-tests:
     name: Testes Unitários
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.9', '3.10', '3.11']
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12'
       
       - name: Instalar Poetry
         uses: snok/install-poetry@v1
@@ -104,9 +98,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: ${{ runner.os }}-poetry-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-3.12-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-${{ matrix.python-version }}-
+            ${{ runner.os }}-poetry-3.12-
       
       - name: Instalar dependências
         run: poetry install --no-interaction --no-root
