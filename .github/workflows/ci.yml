@@ -113,15 +113,17 @@ jobs:
       
       - name: Executar pytest
         run: |
-          poetry run pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=html
+          poetry run pytest tests/ -v --tb=short
+          
+      # poetry run pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=html
       
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+      # - name: Upload coverage reports
+      #   uses: codecov/codecov-action@v3
+      #   with:
+      #     files: ./coverage.xml
+      #     flags: unittests
+      #     name: codecov-umbrella
+      #     fail_ci_if_error: false
 
   pipeline-validation:
     name: Validação do Pipeline
