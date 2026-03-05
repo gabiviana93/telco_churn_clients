@@ -1,22 +1,22 @@
 """
-Configuration Module
-====================
+Módulo de Configuração
+======================
 
-Centralized configuration for the Churn Prediction project.
-All project-wide settings, paths, and constants are defined here.
+Configuração centralizada para o projeto de Predição de Churn.
+Todas as configurações, caminhos e constantes do projeto são definidos aqui.
 
-Configuration is loaded from YAML files with the following priority:
-1. config/project.yaml (project-specific overrides)
-2. config/default.yaml (framework defaults)
-3. Environment variables (highest priority)
+A configuração é carregada de arquivos YAML com a seguinte prioridade:
+1. config/project.yaml (overrides específicos do projeto)
+2. config/default.yaml (valores padrão do framework)
+3. Variáveis de ambiente (maior prioridade)
 
-Usage:
+Uso:
     from src.config import get_config, MODELS_DIR, TARGET
 
-    # Access paths
+    # Acessar caminhos
     model_path = MODELS_DIR / "model.joblib"
 
-    # Get full config
+    # Obter configuração completa
     config = get_config()
     target = config["data"]["target_column"]
 """
@@ -32,7 +32,7 @@ from typing import Any
 import yaml
 
 # =============================================================================
-# PATHS CONFIGURATION
+# CONFIGURAÇÃO DE CAMINHOS
 # =============================================================================
 
 BASE_DIR = Path(__file__).parent.parent
@@ -43,18 +43,18 @@ DATA_DIR_PROCESSED = BASE_DIR / "src" / "data" / "processed"
 REPORTS_DIR = BASE_DIR / "reports"
 LOGS_DIR = BASE_DIR / "logs"
 
-# Ensure directories exist
+# Garante que os diretórios existam
 for _dir in [MODELS_DIR, DATA_DIR_PROCESSED, REPORTS_DIR, LOGS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 
 # =============================================================================
-# YAML CONFIGURATION LOADER
+# CARREGADOR DE CONFIGURAÇÃO YAML
 # =============================================================================
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
-    """Deep merge two dictionaries, with override taking precedence."""
+    """Merge profundo de dois dicionários, com override tendo precedência."""
     result = base.copy()
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
@@ -65,7 +65,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def _load_yaml_file(path: Path) -> dict[str, Any]:
-    """Load a YAML file safely."""
+    """Carrega um arquivo YAML de forma segura."""
     if not path.exists():
         return {}
     with open(path, encoding="utf-8") as f:
@@ -75,26 +75,26 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def get_config() -> dict[str, Any]:
     """
-    Load and merge configuration from YAML files.
+    Carrega e mescla configuração dos arquivos YAML.
 
-    Priority (highest to lowest):
-    1. Environment variables (MODEL_NAME, etc.)
+    Prioridade (maior para menor):
+    1. Variáveis de ambiente (MODEL_NAME, etc.)
     2. config/project.yaml
     3. config/default.yaml
 
     Returns:
-        Merged configuration dictionary
+        Dicionário de configuração mesclado
     """
-    # Load default config
+    # Carregar configuração padrão
     default_config = _load_yaml_file(CONFIG_DIR / "default.yaml")
 
-    # Load project config (overrides defaults)
+    # Carregar configuração do projeto (sobrescreve padrões)
     project_config = _load_yaml_file(CONFIG_DIR / "project.yaml")
 
-    # Merge configs
+    # Mesclar configurações
     config = _deep_merge(default_config, project_config)
 
-    # Apply environment variable overrides
+    # Aplicar overrides de variáveis de ambiente
     env_overrides = {
         "model": {
             "default_name": os.getenv(
@@ -116,12 +116,12 @@ def get_config() -> dict[str, Any]:
 
 
 # =============================================================================
-# CONVENIENCE CONSTANTS (loaded from YAML with fallbacks)
+# CONSTANTES DE CONVENIÊNCIA (carregadas do YAML com fallbacks)
 # =============================================================================
 
 
 def _get_safe(config: dict, *keys, default=None):
-    """Safely get nested config value."""
+    """Obtém valor aninhado da configuração de forma segura."""
     for key in keys:
         if isinstance(config, dict):
             config = config.get(key, default)
@@ -130,10 +130,10 @@ def _get_safe(config: dict, *keys, default=None):
     return config
 
 
-# Load initial config
+# Carregar configuração inicial
 _config = get_config()
 
-# Data Configuration
+# Configuração de Dados
 FILENAME = _get_safe(_config, "data", "filename", default="WA_Fn-UseC_-Telco-Customer-Churn.csv")
 TARGET = _get_safe(_config, "data", "target_column", default="Churn")
 ID_COL = _get_safe(_config, "data", "id_column", default="customerID")
@@ -141,10 +141,10 @@ TEST_SIZE = _get_safe(_config, "data", "test_size", default=0.2)
 RANDOM_STATE = _get_safe(_config, "data", "random_state", default=42)
 N_SPLITS = _get_safe(_config, "data", "cv_folds", default=5)
 
-# Primary metric
+# Métrica principal
 PRIMARY_METRIC = _get_safe(_config, "optimization", "metric", default="f1")
 
-# Feature Configuration
+# Configuração de Features
 NUMERIC_FEATURES = _get_safe(
     _config, "features", "numeric", default=["tenure", "MonthlyCharges", "TotalCharges"]
 )
@@ -172,7 +172,7 @@ CATEGORICAL_FEATURES = _get_safe(
     ],
 )
 
-# Feature Engineering bins
+# Bins de Feature Engineering
 TENURE_BINS = _get_safe(
     _config, "features", "engineering", "binning", "tenure", "bins", default=[0, 6, 12, 24, 48, 72]
 )
@@ -195,16 +195,16 @@ MONTHLY_CAT_LABELS = _get_safe(
     default=["muito_baixo", "baixo", "medio", "alto"],
 )
 
-# Pipeline Step Names (canonical — used everywhere)
+# Nomes dos passos do Pipeline (canônicos — usados em todo o projeto)
 STEP_PREPROCESSING = "preprocessing"
 STEP_MODEL = "model"
 
-# Model Configuration
+# Configuração do Modelo
 DEFAULT_MODEL_NAME = _get_safe(_config, "model", "default_name", default="model")
 MODEL_PATH = MODELS_DIR / f"{DEFAULT_MODEL_NAME}.joblib"
 DEFAULT_MODEL_TYPE = _get_safe(_config, "model", "algorithm", default="lightgbm")
 
-# MLflow Configuration
+# Configuração do MLflow
 MLFLOW_TRACKING_URI = str(
     BASE_DIR / _get_safe(_config, "tracking", "mlflow", "tracking_uri", default="mlruns")
 )
@@ -212,25 +212,25 @@ MLFLOW_EXPERIMENT = _get_safe(
     _config, "tracking", "mlflow", "experiment_name", default="churn_prediction"
 )
 
-# API Configuration
+# Configuração da API
 API_HOST = _get_safe(_config, "api", "host", default="0.0.0.0")
 API_PORT = _get_safe(_config, "api", "port", default=8000)
 API_TITLE = _get_safe(_config, "api", "title", default="Customer Churn Prediction API")
 API_VERSION = _get_safe(_config, "api", "version", default="1.0.0")
 
-# Dashboard Configuration
+# Configuração do Dashboard
 DASHBOARD_HOST = _get_safe(_config, "dashboard", "host", default="0.0.0.0")
 DASHBOARD_PORT = _get_safe(_config, "dashboard", "port", default=8501)
 DASHBOARD_TITLE = _get_safe(_config, "dashboard", "title", default="Customer Churn Dashboard")
 
-# Risk Classification Thresholds
+# Limiares de Classificação de Risco
 RISK_THRESHOLD_LOW = _get_safe(_config, "risk", "threshold_low", default=0.4)
 RISK_THRESHOLD_HIGH = _get_safe(_config, "risk", "threshold_high", default=0.7)
 
-# Positive class for target conversion
+# Classe positiva para conversão do target
 POSITIVE_CLASS = _get_safe(_config, "data", "positive_class", default="Yes")
 
-# Feature Engineering Thresholds
+# Limiares de Feature Engineering
 FE_NEW_CUSTOMER_TENURE_MAX = _get_safe(
     _config, "feature_engineering", "thresholds", "new_customer_tenure_max", default=6
 )
@@ -253,7 +253,7 @@ FE_RISK_SCORE_VERY_HIGH = _get_safe(
     _config, "feature_engineering", "thresholds", "risk_score_very_high", default=6
 )
 
-# Risk weights for composite risk score
+# Pesos de risco para score composto
 FE_RISK_WEIGHTS = {
     "monthly_contract": _get_safe(
         _config, "feature_engineering", "risk_weights", "monthly_contract", default=2.0
@@ -275,7 +275,7 @@ FE_RISK_WEIGHTS = {
     ),
 }
 
-# Lifecycle thresholds
+# Limiares de ciclo de vida
 FE_LIFECYCLE_NEW_MAX = _get_safe(
     _config, "feature_engineering", "lifecycle", "new_max", default=3
 )
@@ -286,7 +286,7 @@ FE_LIFECYCLE_MID_MAX = _get_safe(
     _config, "feature_engineering", "lifecycle", "mid_max", default=36
 )
 
-# Service columns (for AdvancedFeatureEngineer)
+# Colunas de serviço (para AdvancedFeatureEngineer)
 SERVICE_COLS_ALL = _get_safe(_config, "features", "service_columns", "all", default=[])
 SERVICE_COLS_STREAMING = _get_safe(_config, "features", "service_columns", "streaming", default=[])
 SERVICE_COLS_SECURITY = _get_safe(_config, "features", "service_columns", "security", default=[])
@@ -295,14 +295,14 @@ INACTIVE_SERVICE_VALUES = _get_safe(
     default=["No", "No phone service", "No internet service"],
 )
 
-# Valid values for categorical features (from features.valid_values)
+# Valores válidos para features categóricas (de features.valid_values)
 VALID_VALUES = _get_safe(_config, "features", "valid_values", default={})
 
-# Contract type values (used in feature engineering)
+# Valores de tipo de contrato (usados em feature engineering)
 CONTRACT_VALUES = _get_safe(_config, "features", "valid_values", "Contract",
                             default=["Month-to-month", "One year", "Two year"])
 
-# Preprocessing defaults
+# Padrões de pré-processamento
 CATEGORICAL_FILL_VALUE = _get_safe(
     _config, "preprocessing", "imputation", "categorical_fill_value", default="missing"
 )
@@ -318,7 +318,7 @@ MISSING_CATEGORICAL_STRATEGY = _get_safe(
     _config, "features", "missing", "categorical_strategy", default="most_frequent"
 )
 
-# Interpretability / Visualization
+# Interpretabilidade / Visualização
 INTERPRET_TOP_N = _get_safe(
     _config, "interpretability", "feature_importance", "top_n", default=20
 )
@@ -342,7 +342,7 @@ SHAP_N_SAMPLES = _get_safe(
     _config, "interpretability", "shap", "n_samples", default=1000
 )
 
-# Drift monitoring
+# Monitoramento de drift
 DRIFT_PSI_BINS = _get_safe(_config, "drift", "psi_bins", default=10)
 DRIFT_PSI_THRESHOLDS = {
     "none": _get_safe(_config, "drift", "psi_thresholds", "none", default=0.10),
@@ -358,11 +358,11 @@ DRIFT_ESCALATION_LOW_FRACTION = _get_safe(
 DRIFT_QUANTILE_LOWER = _get_safe(_config, "drift", "quantile_clip", "lower", default=0.01)
 DRIFT_QUANTILE_UPPER = _get_safe(_config, "drift", "quantile_clip", "upper", default=0.99)
 
-# API batch/response
+# Batch/resposta da API
 API_BATCH_MAX_SIZE = _get_safe(_config, "api", "batch", "max_size", default=1000)
 API_METRIC_PRECISION = _get_safe(_config, "api", "response", "metric_precision", default=4)
 
-# Optimization search spaces (loaded from YAML)
+# Espaços de busca de otimização (carregados do YAML)
 _search_space = _get_safe(_config, "optimization", "search_space", default={})
 SEARCH_SPACE = {
     "n_estimators": tuple(_search_space.get("n_estimators", [50, 400])),
@@ -375,14 +375,14 @@ SEARCH_SPACE = {
     "reg_alpha": tuple(_search_space.get("reg_alpha", [0.0, 2.0])),
     "reg_lambda": tuple(_search_space.get("reg_lambda", [0.0, 2.0])),
     "scale_pos_weight": tuple(_search_space.get("scale_pos_weight", [1.0, 5.0])),
-    # LightGBM-specific
+    # Específicos do LightGBM
     "num_leaves": tuple(_search_space.get("num_leaves", [20, 150])),
     "min_child_samples": tuple(_search_space.get("min_child_samples", [5, 50])),
-    # CatBoost-specific
+    # Específicos do CatBoost
     "l2_leaf_reg": tuple(_search_space.get("l2_leaf_reg", [1.0, 10.0])),
 }
 
-# Optimization defaults (loaded from YAML)
+# Padrões de otimização (carregados do YAML)
 DEFAULT_N_TRIALS = _get_safe(_config, "optimization", "n_trials", default=50)
 DEFAULT_OPTIMIZATION_METRIC = _get_safe(_config, "optimization", "metric", default="f1")
 DEFAULT_OPTIMIZE_THRESHOLD = _get_safe(_config, "optimization", "optimize_threshold", default=True)
@@ -390,7 +390,7 @@ DEFAULT_OPTIMIZATION_TIMEOUT = _get_safe(_config, "optimization", "timeout", def
 
 
 # =============================================================================
-# MODEL REGISTRY
+# REGISTRO DE MODELOS
 # =============================================================================
 
 MODEL_REGISTRY: dict[str, dict[str, Any]] = _get_safe(
@@ -399,22 +399,22 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = _get_safe(
 
 
 def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
-    """Create a model instance using the YAML registry configuration.
+    """Cria uma instância de modelo usando a configuração do registro YAML.
 
-    The registry (``model.registry`` in YAML) maps algorithm names to their
-    Python class, parameter filters, mappings, and defaults.  This replaces
-    all hardcoded ``if model_type == …`` branches.
+    O registro (``model.registry`` no YAML) mapeia nomes de algoritmos para suas
+    classes Python, filtros de parâmetros, mapeamentos e padrões. Isso substitui
+    todos os branches hardcoded ``if model_type == …``.
 
     Args:
-        algorithm: Key in ``model.registry`` (e.g. ``"xgboost"``, ``"lightgbm"``).
-        model_params: Raw parameter dict (e.g. from ``ModelConfig.to_dict()``).
+        algorithm: Chave no ``model.registry`` (ex.: ``"xgboost"``, ``"lightgbm"``).
+        model_params: Dict de parâmetros brutos (ex.: de ``ModelConfig.to_dict()``).
 
     Returns:
-        Instantiated classifier ready for ``.fit()``.
+        Classificador instanciado pronto para ``.fit()``.
 
     Raises:
-        ValueError: If *algorithm* is not found in the registry.
-        ImportError: If the model's package is not installed.
+        ValueError: Se *algorithm* não for encontrado no registro.
+        ImportError: Se o pacote do modelo não estiver instalado.
     """
     import importlib
 
@@ -429,7 +429,7 @@ def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
     algo_cfg = MODEL_REGISTRY[algorithm]
     class_path: str = algo_cfg["class"]
 
-    # Dynamic import
+    # Import dinâmico
     module_path, class_name = class_path.rsplit(".", 1)
     try:
         module = importlib.import_module(module_path)
@@ -440,17 +440,17 @@ def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
         ) from exc
     model_class = getattr(module, class_name)
 
-    # 1. Filter excluded params
+    # 1. Filtrar parâmetros excluídos
     exclude = set(algo_cfg.get("exclude_params", []))
     filtered = {k: v for k, v in model_params.items() if k not in exclude}
 
-    # 2. Apply param mapping (from original params, even if excluded)
+    # 2. Aplicar mapeamento de parâmetros (dos parâmetros originais, mesmo se excluídos)
     for old_name, new_name in algo_cfg.get("param_mapping", {}).items():
         if old_name in model_params:
             filtered[new_name] = model_params[old_name]
             filtered.pop(old_name, None)
 
-    # 3. Apply default params (highest priority — always override)
+    # 3. Aplicar parâmetros padrão (maior prioridade — sempre sobrescrevem)
     filtered.update(algo_cfg.get("default_params", {}))
 
     return model_class(**filtered)
@@ -458,28 +458,22 @@ def create_model(algorithm: str, model_params: dict[str, Any]) -> Any:
 
 
 # =============================================================================
-# DATACLASSES FOR CONFIGURATION
+# DATACLASSES DE CONFIGURAÇÃO
 # =============================================================================
 
 
 @dataclass
 class ModelConfig:
-    """Configuration for model training.
+    """Configuração para treinamento de modelo.
 
-    Defaults are loaded from ``config/project.yaml`` > ``config/default.yaml``.
-    All fields can be overridden at construction time.
+    Os padrões são carregados de ``config/project.yaml`` > ``config/default.yaml``.
+    Todos os campos podem ser sobrescritos na construção.
     """
 
     model_type: str = field(default_factory=lambda: DEFAULT_MODEL_TYPE)
     n_estimators: int = field(
         default_factory=lambda: _get_safe(_config, "model", "params", "n_estimators", default=300)
     )
-
-    def __post_init__(self) -> None:
-        # Accept both ModelType enum and plain string for backward compat
-        if hasattr(self.model_type, "value"):
-            self.model_type = self.model_type.value
-
     max_depth: int = field(
         default_factory=lambda: _get_safe(_config, "model", "params", "max_depth", default=6)
     )
@@ -518,12 +512,17 @@ class ModelConfig:
         )
     )
 
-    # LightGBM-specific (only included in to_dict when set)
+    # Específicos do LightGBM (incluídos no to_dict apenas quando definidos)
     num_leaves: int | None = None
     min_child_samples: int | None = None
 
+    def __post_init__(self) -> None:
+        # Aceita tanto enum ModelType quanto string para compatibilidade
+        if hasattr(self.model_type, "value"):
+            self.model_type = self.model_type.value
+
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for model initialization."""
+        """Converte para dicionário para inicialização do modelo."""
         d = {
             "n_estimators": self.n_estimators,
             "max_depth": self.max_depth,
@@ -539,7 +538,7 @@ class ModelConfig:
             "eval_metric": self.eval_metric,
             "verbosity": 0,
         }
-        # LightGBM-specific params (only included when explicitly set)
+        # Parâmetros específicos do LightGBM (incluídos apenas quando definidos)
         if self.num_leaves is not None:
             d["num_leaves"] = self.num_leaves
         if self.min_child_samples is not None:
