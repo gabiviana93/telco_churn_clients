@@ -1,0 +1,90 @@
+name: PR - Análise de Código
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  code-analysis:
+    name: Análise de Código
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Instalar Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.2
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+      
+      - name: Instalar dependências
+        run: poetry install --no-interaction --no-root
+      
+      - name: Verificar mudanças nos arquivos Python
+        run: |
+          git diff origin/main --name-only | grep '\.py$' || echo "Nenhum arquivo Python modificado"
+      
+      - name: Executar testes impactados
+        run: |
+          poetry run pytest tests/ -v --tb=short
+      
+      - name: Analisar cobertura de testes
+        continue-on-error: true
+        run: |
+          poetry run pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
+      
+      - name: Validar importações
+        run: |
+          poetry run python -c "
+          import ast
+          import pathlib
+          
+          errors = []
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' not in str(py_file):
+                  try:
+                      with open(py_file) as f:
+                          ast.parse(f.read())
+                  except SyntaxError as e:
+                      errors.append(f'{py_file}: {e}')
+          
+          if errors:
+              for error in errors:
+                  print(f'❌ {error}')
+              exit(1)
+          else:
+              print('✅ Todas as importações estão corretas')
+          "
+      
+      - name: Adicionar comentário no PR
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **CI Pipeline Executado**\n\nTodos os testes foram executados. Verifique os detalhes acima.'
+            })

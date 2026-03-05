@@ -1,0 +1,191 @@
+name: Code Quality - Pre-commit
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  code-quality:
+    name: Qualidade de Código
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Instalar Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.2
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: ${{ runner.os }}-poetry-quality-${{ hashFiles('**/poetry.lock') }}
+      
+      - name: Instalar dependências
+        run: poetry install --no-interaction --no-root
+      
+      - name: Verificar formatação com autopep8
+        continue-on-error: true
+        run: |
+          poetry run autopep8 --diff --recursive src/ tests/ scripts/ || echo "Aviso: Alguns arquivos poderiam ser reformatados"
+      
+      - name: Verificar duplicação de código
+        continue-on-error: true
+        run: |
+          poetry run python -c "
+          import pathlib
+          from collections import defaultdict
+          
+          # Análise simples de duplicação
+          lines_count = defaultdict(int)
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' not in str(py_file):
+                  with open(py_file) as f:
+                      for line in f:
+                          stripped = line.strip()
+                          if stripped and not stripped.startswith('#'):
+                              lines_count[stripped] += 1
+          
+          # Encontrar linhas duplicadas
+          duplicated = {line: count for line, count in lines_count.items() if count > 3 and len(line) > 30}
+          
+          if duplicated:
+              print('⚠️  Possível código duplicado encontrado:')
+              for line, count in sorted(duplicated.items(), key=lambda x: x[1], reverse=True)[:5]:
+                  print(f'  {count}x: {line[:60]}...')
+          else:
+              print('✅ Nenhuma duplicação significativa detectada')
+          "
+      
+      - name: Verificar tamanho de funções
+        continue-on-error: true
+        run: |
+          poetry run python -c "
+          import ast
+          import pathlib
+          
+          class FunctionAnalyzer(ast.NodeVisitor):
+              def __init__(self):
+                  self.large_functions = []
+                  self.current_file = None
+              
+              def visit_FunctionDef(self, node):
+                  lines = node.end_lineno - node.lineno
+                  if lines > 50:
+                      self.large_functions.append((self.current_file, node.name, lines))
+                  self.generic_visit(node)
+          
+          analyzer = FunctionAnalyzer()
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' not in str(py_file):
+                  analyzer.current_file = py_file
+                  with open(py_file) as f:
+                      try:
+                          tree = ast.parse(f.read())
+                          analyzer.visit(tree)
+                      except SyntaxError:
+                          pass
+          
+          if analyzer.large_functions:
+              print('⚠️  Funções grandes encontradas (>50 linhas):')
+              for file, name, lines in analyzer.large_functions:
+                  print(f'  {file}: {name} ({lines} linhas)')
+          else:
+              print('✅ Todas as funções têm tamanho apropriado')
+          "
+      
+      - name: Validar docstrings
+        continue-on-error: true
+        run: |
+          poetry run python -c "
+          import ast
+          import pathlib
+          
+          class DocstringChecker(ast.NodeVisitor):
+              def __init__(self):
+                  self.missing_docs = []
+              
+              def visit_FunctionDef(self, node):
+                  if not ast.get_docstring(node) and not node.name.startswith('_'):
+                      self.missing_docs.append((node.name, node.lineno))
+                  self.generic_visit(node)
+              
+              def visit_ClassDef(self, node):
+                  if not ast.get_docstring(node) and not node.name.startswith('_'):
+                      self.missing_docs.append((node.name, node.lineno))
+                  self.generic_visit(node)
+          
+          checker = DocstringChecker()
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' not in str(py_file):
+                  with open(py_file) as f:
+                      try:
+                          tree = ast.parse(f.read())
+                          checker.visit(tree)
+                      except SyntaxError:
+                          pass
+          
+          if checker.missing_docs:
+              print('⚠️  Docstrings faltando em:')
+              for name, lineno in checker.missing_docs[:10]:
+                  print(f'  Linha {lineno}: {name}')
+          else:
+              print('✅ Todas as funções e classes têm docstrings')
+          "
+      
+      - name: Verificar complexidade ciclomática
+        continue-on-error: true
+        run: |
+          poetry run python -c "
+          import ast
+          import pathlib
+          
+          class ComplexityChecker(ast.NodeVisitor):
+              def __init__(self):
+                  self.complex_functions = []
+              
+              def visit_FunctionDef(self, node):
+                  complexity = self.calculate_complexity(node)
+                  if complexity > 10:
+                      self.complex_functions.append((node.name, complexity))
+                  self.generic_visit(node)
+              
+              def calculate_complexity(self, node):
+                  complexity = 1
+                  for child in ast.walk(node):
+                      if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
+                          complexity += 1
+                  return complexity
+          
+          checker = ComplexityChecker()
+          for py_file in pathlib.Path('src').glob('**/*.py'):
+              if '__pycache__' not in str(py_file):
+                  with open(py_file) as f:
+                      try:
+                          tree = ast.parse(f.read())
+                          checker.visit(tree)
+                      except SyntaxError:
+                          pass
+          
+          if checker.complex_functions:
+              print('⚠️  Funções com alta complexidade (>10):')
+              for name, complexity in checker.complex_functions[:5]:
+                  print(f'  {name}: Complexidade {complexity}')
+          else:
+              print('✅ Nenhuma função com complexidade excessiva')
+          "
