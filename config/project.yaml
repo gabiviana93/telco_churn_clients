@@ -1,0 +1,483 @@
+# ==============================================================================
+# CONFIGURAÇÃO DO PROJETO: Customer Churn Prediction
+# ==============================================================================
+# Este arquivo contém as configurações específicas deste projeto.
+# Ele sobrescreve as configurações padrão de config/default.yaml
+# 
+# COMO CRIAR SEU PROJETO:
+# 1. Copie este arquivo para seu novo projeto
+# 2. Modifique os valores conforme seu caso de uso
+# 3. O framework carregará automaticamente estas configurações
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# INFORMAÇÕES DO PROJETO
+# ------------------------------------------------------------------------------
+project:
+  name: "churn_clientes"
+  version: "1.3.0"
+  description: "Predição de Churn de Clientes de Telecomunicações"
+  author: "Gabriela"
+  language: "pt-BR"
+  
+  # Metadados do negócio
+  business:
+    domain: "telecommunications"
+    problem_type: "binary_classification"
+    target_description: "Cliente cancelou serviço (churn)"
+    business_metric: "redução de churn em 15%"
+
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DE DADOS
+# ------------------------------------------------------------------------------
+data:
+  # Arquivo de dados
+  filename: "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+  file_format: "csv"
+  encoding: "utf-8"
+  separator: ","
+  
+  # Colunas especiais
+  target_column: "Churn"
+  id_column: "customerID"
+  
+  # Target
+  target_type: "binary"
+  positive_class: "Yes"  # Ou 1 após conversão
+  positive_class_values: ["Yes", "yes", "1", 1, true, True]
+  
+  # Split
+  test_size: 0.2
+  validation_size: 0.0  # Usando apenas train/test
+  random_state: 42
+  stratify: true
+  
+  # Cross-validation
+  cv_folds: 5
+  cv_shuffle: true
+
+# ------------------------------------------------------------------------------
+# FEATURES
+# ------------------------------------------------------------------------------
+features:
+  # Features numéricas
+  numeric:
+    - tenure
+    - MonthlyCharges
+    - TotalCharges
+    
+  # Features categóricas
+  categorical:
+    - gender
+    - SeniorCitizen
+    - Partner
+    - Dependents
+    - PhoneService
+    - MultipleLines
+    - InternetService
+    - OnlineSecurity
+    - OnlineBackup
+    - DeviceProtection
+    - TechSupport
+    - StreamingTV
+    - StreamingMovies
+    - Contract
+    - PaperlessBilling
+    - PaymentMethod
+    
+  # Features a ignorar
+  drop_columns:
+    - customerID
+    
+  # Valores válidos por feature (para validação)
+  valid_values:
+    gender: ["Male", "Female"]
+    SeniorCitizen: [0, 1]
+    Partner: ["Yes", "No"]
+    Dependents: ["Yes", "No"]
+    PhoneService: ["Yes", "No"]
+    MultipleLines: ["Yes", "No", "No phone service"]
+    InternetService: ["DSL", "Fiber optic", "No"]
+    OnlineSecurity: ["Yes", "No", "No internet service"]
+    OnlineBackup: ["Yes", "No", "No internet service"]
+    DeviceProtection: ["Yes", "No", "No internet service"]
+    TechSupport: ["Yes", "No", "No internet service"]
+    StreamingTV: ["Yes", "No", "No internet service"]
+    StreamingMovies: ["Yes", "No", "No internet service"]
+    Contract: ["Month-to-month", "One year", "Two year"]
+    PaperlessBilling: ["Yes", "No"]
+    PaymentMethod:
+      - "Electronic check"
+      - "Mailed check"
+      - "Bank transfer (automatic)"
+      - "Credit card (automatic)"
+
+  # Valores que indicam "serviço não ativo" (para contagem de serviços)
+  inactive_service_values: ["No", "No phone service", "No internet service"]
+
+  # Colunas de serviços (para AdvancedFeatureEngineer)
+  service_columns:
+    all:
+      - PhoneService
+      - MultipleLines
+      - InternetService
+      - OnlineSecurity
+      - OnlineBackup
+      - DeviceProtection
+      - TechSupport
+      - StreamingTV
+      - StreamingMovies
+    streaming:
+      - StreamingTV
+      - StreamingMovies
+    security:
+      - OnlineSecurity
+      - OnlineBackup
+      - DeviceProtection
+      - TechSupport
+
+  # Tratamento de valores ausentes
+  missing:
+    numeric_strategy: "median"
+    categorical_strategy: "most_frequent"
+
+  # Ranges para features numéricas (usado no dashboard e validação)
+  numeric_ranges:
+    tenure:
+      type: int
+      min: 0
+      max: 72
+      default: 12
+    MonthlyCharges:
+      type: float
+      min: 18.0
+      max: 120.0
+      default: 70.0
+    TotalCharges:
+      type: float
+      min: 0.0
+      max: 10000.0
+      default: 1397.47
+    
+  # Feature Engineering
+  engineering:
+    enabled: true
+    
+    # Features customizadas
+    custom_features:
+      # Flag de cliente novo
+      - name: "is_new_customer"
+        type: "binary"
+        condition: "tenure <= 6"
+        description: "Cliente com menos de 6 meses"
+        
+      # Gasto médio por mês
+      - name: "avg_monthly_charge"
+        type: "ratio"
+        formula: "TotalCharges / (tenure + 1)"
+        description: "Gasto médio mensal"
+        
+      # Sensibilidade a preço
+      - name: "price_sensitivity"
+        type: "interaction"
+        features: ["Contract", "MonthlyCharges"]
+        description: "Combinação contrato + valor"
+        
+    # Bins para features numéricas
+    binning:
+      tenure:
+        bins: [0, 6, 12, 24, 48, 72]
+        labels: ["0-6m", "7-12m", "1-2a", "2-4a", "4-6a"]
+      MonthlyCharges:
+        method: "quantile"
+        n_bins: 4
+        labels: ["muito_baixo", "baixo", "medio", "alto"]
+
+# ------------------------------------------------------------------------------
+# FEATURE ENGINEERING — THRESHOLDS
+# ------------------------------------------------------------------------------
+feature_engineering:
+  thresholds:
+    new_customer_tenure_max: 6       # tenure == 0 → new_customer_flag
+    charges_divergence: 0.3          # divergência charges_mismatch_flag
+    early_churn_tenure: 12           # tenure < X → early_churn_risk
+    low_engagement_max: 2            # total_services <= X → low_engagement
+    high_engagement_min: 5           # total_services >= X → high_engagement
+    risk_score_high: 4               # risk_score >= X → high_risk_flag
+    risk_score_very_high: 6          # risk_score >= X → very_high_risk_flag
+
+  risk_weights:
+    monthly_contract: 2.0
+    short_tenure: 2.0
+    fiber_no_security: 1.5
+    low_engagement: 1.0
+    paperless_billing: 0.5
+    electronic_check: 1.0
+
+  lifecycle:
+    new_max: 3
+    early_max: 12
+    mid_max: 36
+
+# ------------------------------------------------------------------------------
+# PRÉ-PROCESSAMENTO
+# ------------------------------------------------------------------------------
+preprocessing:
+  scaler:
+    type: "robust"
+    
+  encoder:
+    type: "onehot"
+    handle_unknown: "ignore"
+    drop_first: false
+    
+  outliers:
+    method: null  # Não tratar outliers neste dataset
+
+# ------------------------------------------------------------------------------
+# MODELO
+# ------------------------------------------------------------------------------
+model:
+  task: "classification"
+  algorithm: "lightgbm"  # xgboost, lightgbm, catboost
+  
+  # Nome do modelo padrão (sem extensão .joblib)
+  default_name: "model"
+  
+  # Parâmetros otimizados
+  params:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    
+  # Ensemble (opcional)
+  ensemble:
+    enabled: false
+    models:
+      - algorithm: "xgboost"
+        weight: 0.5
+      - algorithm: "lightgbm"
+        weight: 0.5
+    method: "voting"  # voting, stacking
+    
+  # Balanceamento de classes
+  class_balance:
+    enabled: true
+    method: "smote"
+    sampling_strategy: "auto"
+
+# ------------------------------------------------------------------------------
+# OTIMIZAÇÃO
+# ------------------------------------------------------------------------------
+optimization:
+  enabled: true
+  library: "optuna"
+  
+  n_trials: 50
+  timeout: 3600
+  n_jobs: 1
+  
+  metric: "f1"
+  direction: "maximize"
+  
+  optimize_threshold: true
+  
+  # Espaço de busca customizado
+  search_space:
+    # LightGBM / XGBoost
+    n_estimators: [100, 500]
+    max_depth: [3, 10]
+    learning_rate: [0.01, 0.3]
+    num_leaves: [15, 127]  # LightGBM específico
+    subsample: [0.6, 1.0]
+    colsample_bytree: [0.6, 1.0]
+    reg_alpha: [0.0, 1.0]
+    reg_lambda: [0.0, 1.0]
+    min_child_samples: [5, 100]  # LightGBM específico
+
+# ------------------------------------------------------------------------------
+# AVALIAÇÃO
+# ------------------------------------------------------------------------------
+evaluation:
+  classification_metrics:
+    - accuracy
+    - f1
+    - precision
+    - recall
+    - roc_auc
+    - confusion_matrix
+    - classification_report
+    
+  # Métricas de negócio
+  business_metrics:
+    # Custo de falso negativo (perder cliente sem detectar)
+    false_negative_cost: 500
+    # Custo de falso positivo (ação desnecessária)
+    false_positive_cost: 50
+    # Benefício de verdadeiro positivo (reter cliente)
+    true_positive_benefit: 200
+    
+  generate_reports: true
+  save_plots: true
+
+# ------------------------------------------------------------------------------
+# INTERPRETABILIDADE
+# ------------------------------------------------------------------------------
+interpretability:
+  enabled: true
+  
+  shap:
+    enabled: true
+    save_values: true
+    n_samples: 1000
+    
+  feature_importance:
+    enabled: true
+    method: "gain"
+    
+  # Top features para explicações
+  top_features: 10
+
+  visualization:
+    figsize_large: [12, 8]
+    figsize_medium: [10, 6]
+    figsize_small: [8, 6]
+    top_factors: 3
+    shap_sample_size: 500
+
+# ------------------------------------------------------------------------------
+# MLFLOW
+# ------------------------------------------------------------------------------
+tracking:
+  enabled: true
+  backend: "mlflow"
+  
+  mlflow:
+    tracking_uri: "mlruns"
+    experiment_name: "churn_prediction"
+    auto_log: true
+    log_models: true
+
+# ------------------------------------------------------------------------------
+# API
+# ------------------------------------------------------------------------------
+api:
+  enabled: true
+  framework: "fastapi"
+  
+  title: "Customer Churn Prediction API"
+  description: |
+    **Customer Churn Prediction API**
+    
+    Machine Learning API for predicting customer churn in telecommunications.
+    
+    ## Features
+    
+    * **Real-time Predictions**: Single customer churn prediction
+    * **Batch Predictions**: Process multiple customers at once
+    * **Model Insights**: Feature importance and model metrics
+    * **Health Monitoring**: API and model health status
+  
+  version: "1.3.0"
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  debug: false
+  
+  # Endpoints customizados
+  endpoints:
+    health: "/health"
+    predict: "/predict"
+    predict_batch: "/predict/batch"
+    interpret: "/interpret"
+    metrics: "/metrics"
+
+  # Batch prediction
+  batch:
+    max_size: 1000
+
+  # Precisão de métricas na resposta
+  response:
+    metric_precision: 4
+
+# ------------------------------------------------------------------------------
+# DASHBOARD
+# ------------------------------------------------------------------------------
+dashboard:
+  enabled: true
+  framework: "streamlit"
+  
+  host: "0.0.0.0"
+  port: 8501
+  
+  title: "Customer Churn Dashboard"
+  icon: ""
+  
+  pages:
+    - name: "home"
+      title: "Início"
+      description: "Visão geral do projeto"
+    - name: "prediction"
+      title: "Predição"
+      description: "Fazer predições individuais"
+    - name: "analysis"
+      title: "Análise"
+      description: "Análise exploratória dos dados"
+    - name: "metrics"
+      title: "Métricas"
+      description: "Performance do modelo"
+    - name: "mlflow"
+      title: "Experimentos"
+      description: "Tracking de experimentos MLflow"
+
+# ------------------------------------------------------------------------------
+# CLASSIFICAÇÃO DE RISCO
+# ------------------------------------------------------------------------------
+risk:
+  threshold_low: 0.4   # Abaixo = risco baixo
+  threshold_high: 0.7  # Acima = risco alto
+
+# ------------------------------------------------------------------------------
+# DATA DRIFT MONITORING
+# ------------------------------------------------------------------------------
+drift:
+  # Limiares PSI para classificação de severidade
+  psi_thresholds:
+    none: 0.10       # PSI < 0.10 = sem drift significativo
+    low: 0.20        # 0.10 <= PSI < 0.20 = drift baixo
+    moderate: 0.25   # 0.20 <= PSI < 0.25 = drift moderado
+    # PSI >= 0.25 = drift alto
+  
+  # Número de bins para cálculo do PSI
+  psi_bins: 10
+  
+  # Limiares de escalação (relatório geral)
+  escalation:
+    moderate_feature_count: 2    # Acima deste count de features moderate → escalar
+    low_feature_fraction: 0.3    # Fração de features low para escalar severidade
+
+  # Simulação de dados de produção (dashboard)
+  simulation:
+    drift_intensity_default: 0.3
+    noise_factor_default: 0.1
+    sample_fraction: 1.0
+
+  # Quantile clipping para dados numéricos
+  quantile_clip:
+    lower: 0.01
+    upper: 0.99
+
+# ------------------------------------------------------------------------------
+# LOGGING
+# ------------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  
+  file:
+    enabled: true
+    path: "logs/churn_pipeline.log"
+    max_bytes: 10485760
+    backup_count: 5

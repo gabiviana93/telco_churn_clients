@@ -1,0 +1,473 @@
+# ==============================================================================
+# CONFIGURAÇÃO PADRÃO DO FRAMEWORK ML
+# ==============================================================================
+# Este arquivo contém as configurações padrão do framework.
+# NÃO MODIFIQUE este arquivo. Use config/project.yaml para customizações.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# INFORMAÇÕES DO PROJETO
+# ------------------------------------------------------------------------------
+project:
+  name: "ml_framework"
+  version: "1.0.0"
+  description: "Framework para projetos de Machine Learning"
+  author: ""  # Defina no config/project.yaml
+  language: "pt-BR"  # pt-BR, en-US, es-ES
+
+# ------------------------------------------------------------------------------
+# ESTRUTURA DE DIRETÓRIOS
+# ------------------------------------------------------------------------------
+paths:
+  base_dir: "."
+  data:
+    raw: "src/data/raw"
+    processed: "src/data/processed"
+    external: "src/data/external"
+  models: "models"
+  reports: "reports"
+  logs: "logs"
+  notebooks: "notebooks"
+  scripts: "scripts"
+  tests: "tests"
+
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DE DADOS
+# ------------------------------------------------------------------------------
+data:
+  # Arquivo de dados
+  filename: "dataset.csv"
+  file_format: "csv"  # csv, parquet, json, excel
+  encoding: "utf-8"
+  separator: ","
+  
+  # Colunas especiais
+  target_column: "target"
+  id_column: null  # Coluna de ID (será removida automaticamente)
+  date_column: null  # Coluna de data (para séries temporais)
+  
+  # Target
+  target_type: "binary"  # binary, multiclass, regression
+  positive_class: 1  # Valor da classe positiva (para classificação binária)
+  positive_class_values: [1, "1", "Yes", "yes", true, True]
+  
+  # Split
+  test_size: 0.2
+  validation_size: 0.1
+  random_state: 42
+  stratify: true
+  
+  # Cross-validation
+  cv_folds: 5
+  cv_shuffle: true
+
+# ------------------------------------------------------------------------------
+# FEATURES
+# ------------------------------------------------------------------------------
+features:
+  # Features numéricas (detectadas automaticamente se não especificadas)
+  numeric: []
+  
+  # Features categóricas (detectadas automaticamente se não especificadas)
+  categorical: []
+  
+  # Features a ignorar/remover
+  drop_columns: []
+  
+  # Auto-detecção de tipos
+  auto_detect: true
+  categorical_threshold: 10  # Max valores únicos para considerar categórica
+  
+  # Tratamento de valores ausentes
+  missing:
+    numeric_strategy: "median"  # mean, median, most_frequent, constant
+    categorical_strategy: "most_frequent"  # most_frequent, constant
+    fill_value: null  # Valor para strategy='constant'
+    
+  # Feature Engineering automático
+  engineering:
+    enabled: true
+    create_interactions: false
+    polynomial_features: false
+    polynomial_degree: 2
+
+  # Colunas de serviços (telecomunicações — sobrescreva no project.yaml)
+  service_columns:
+    all: []
+    streaming: []
+    security: []
+
+  # Valores que indicam "serviço não ativo" (para contagem de serviços)
+  inactive_service_values: ["No", "No phone service", "No internet service"]
+
+# ------------------------------------------------------------------------------
+# FEATURE ENGINEERING — THRESHOLDS
+# ------------------------------------------------------------------------------
+feature_engineering:
+  thresholds:
+    new_customer_tenure_max: 6       # tenure == 0 → new_customer_flag
+    charges_divergence: 0.3          # divergência charges_mismatch_flag
+    early_churn_tenure: 12           # tenure < X → early_churn_risk
+    low_engagement_max: 2            # total_services <= X → low_engagement
+    high_engagement_min: 5           # total_services >= X → high_engagement
+    risk_score_high: 4               # risk_score >= X → high_risk_flag
+    risk_score_very_high: 6          # risk_score >= X → very_high_risk_flag
+
+  # Pesos do risk score composto
+  risk_weights:
+    monthly_contract: 2.0
+    short_tenure: 2.0
+    fiber_no_security: 1.5
+    low_engagement: 1.0
+    paperless_billing: 0.5
+    electronic_check: 1.0
+
+  # Lifecycle phases (tenure thresholds)
+  lifecycle:
+    new_max: 3
+    early_max: 12
+    mid_max: 36
+    # mature = acima de mid_max
+
+# ------------------------------------------------------------------------------
+# PRÉ-PROCESSAMENTO
+# ------------------------------------------------------------------------------
+preprocessing:
+  # Scaler para features numéricas
+  scaler:
+    type: "robust"  # standard, robust, minmax, none
+    
+  # Encoder para features categóricas
+  encoder:
+    type: "onehot"  # onehot, label, ordinal, target
+    handle_unknown: "ignore"  # ignore, error
+    drop_first: false
+    
+  # Imputation
+  imputation:
+    categorical_fill_value: "missing"  # Valor para imputer strategy='constant'
+    
+  # Tratamento de outliers
+  outliers:
+    method: null  # iqr, zscore, isolation_forest, none
+    threshold: 1.5  # Para IQR | 3.0 para zscore
+    strategy: "clip"  # clip, remove, none
+
+# ------------------------------------------------------------------------------
+# MODELO
+# ------------------------------------------------------------------------------
+model:
+  # Tipo de tarefa
+  task: "classification"  # classification, regression
+  
+  # Algoritmo
+  algorithm: "xgboost"  # Qualquer chave do registry abaixo
+  
+  # Nome do modelo salvo
+  default_name: "model"
+  
+  # Parâmetros padrão (ajustados por otimização)
+  params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    verbosity: 0
+    
+  # Balanceamento de classes
+  class_balance:
+    enabled: false
+    method: "scale_pos_weight"  # scale_pos_weight, smote, adasyn, smotetomek
+    sampling_strategy: "auto"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # REGISTRY DE MODELOS
+  # ──────────────────────────────────────────────────────────────────────────
+  # Cada entrada mapeia um nome de algoritmo para sua configuração.
+  # Para adicionar um modelo customizado, basta criar uma nova entrada
+  # em config/project.yaml com a mesma estrutura.
+  #
+  # Campos:
+  #   class           — Caminho completo da classe (module.ClassName)
+  #   default_params  — Params aplicados incondicionalmente ao construtor
+  #   exclude_params  — Params do model.params a IGNORAR para este modelo
+  #   param_mapping   — Renomear params antes de passar ao construtor
+  #                     (ex: reg_lambda → l2_leaf_reg para CatBoost)
+  #   search_params   — Lista de chaves do optimization.search_space a
+  #                     otimizar para este modelo (Optuna)
+  # ──────────────────────────────────────────────────────────────────────────
+  registry:
+    xgboost:
+      class: "xgboost.XGBClassifier"
+      default_params:
+        verbosity: 0
+        eval_metric: "logloss"
+      exclude_params: []
+      param_mapping: {}
+      search_params:
+        - n_estimators
+        - max_depth
+        - learning_rate
+        - subsample
+        - colsample_bytree
+        - min_child_weight
+        - gamma
+        - reg_alpha
+        - reg_lambda
+        - scale_pos_weight
+
+    lightgbm:
+      class: "lightgbm.LGBMClassifier"
+      default_params:
+        verbose: -1
+        n_jobs: -1
+      exclude_params:
+        - min_child_weight
+        - gamma
+        - verbosity
+        - eval_metric
+      param_mapping: {}
+      search_params:
+        - n_estimators
+        - max_depth
+        - learning_rate
+        - subsample
+        - colsample_bytree
+        - num_leaves
+        - min_child_samples
+        - reg_alpha
+        - reg_lambda
+
+    catboost:
+      class: "catboost.CatBoostClassifier"
+      default_params:
+        verbose: 0
+      exclude_params:
+        - min_child_weight
+        - gamma
+        - colsample_bytree
+        - scale_pos_weight
+        - verbosity
+        - eval_metric
+        - reg_alpha
+        - reg_lambda
+        - num_leaves
+        - min_child_samples
+      param_mapping:
+        reg_lambda: "l2_leaf_reg"
+      search_params:
+        - n_estimators
+        - max_depth
+        - learning_rate
+        - subsample
+        - l2_leaf_reg
+
+# ------------------------------------------------------------------------------
+# OTIMIZAÇÃO
+# ------------------------------------------------------------------------------
+optimization:
+  enabled: true
+  library: "optuna"  # optuna, sklearn
+  
+  # Configuração Optuna
+  n_trials: 50
+  timeout: 3600  # segundos (1 hora)
+  n_jobs: 1
+  
+  # Métrica para otimização
+  metric: "f1"  # f1, roc_auc, accuracy, precision, recall, rmse, mae
+  direction: "maximize"  # maximize, minimize
+  
+  # Threshold optimization (classificação)
+  optimize_threshold: true
+  
+  # Espaço de busca (sobrescrito pelo algoritmo específico)
+  search_space:
+    n_estimators: [50, 500]
+    max_depth: [3, 10]
+    learning_rate: [0.01, 0.3]
+    subsample: [0.6, 1.0]
+    colsample_bytree: [0.6, 1.0]
+
+# ------------------------------------------------------------------------------
+# AVALIAÇÃO
+# ------------------------------------------------------------------------------
+evaluation:
+  # Métricas para classificação
+  classification_metrics:
+    - accuracy
+    - f1
+    - precision
+    - recall
+    - roc_auc
+    - confusion_matrix
+    - classification_report
+    
+  # Métricas para regressão
+  regression_metrics:
+    - rmse
+    - mae
+    - r2
+    - mape
+    
+  # Gerar relatórios
+  generate_reports: true
+  report_format: "html"  # html, pdf, markdown
+  
+  # Salvar gráficos
+  save_plots: true
+  plot_format: "png"  # png, svg, pdf
+
+# ------------------------------------------------------------------------------
+# INTERPRETABILIDADE
+# ------------------------------------------------------------------------------
+interpretability:
+  enabled: true
+  
+  # SHAP
+  shap:
+    enabled: true
+    save_values: true
+    n_samples: 1000  # Para grandes datasets
+    
+  # Feature Importance
+  feature_importance:
+    enabled: true
+    method: "gain"  # gain, split, permutation
+    top_n: 20        # Número de top features a mostrar
+    
+  # LIME (opcional)
+  lime:
+    enabled: false
+
+  # Visualização
+  visualization:
+    figsize_large: [12, 8]
+    figsize_medium: [10, 6]
+    figsize_small: [8, 6]
+    top_factors: 3          # Top fatores positivos/negativos para explicações
+    shap_sample_size: 500   # Amostras para SHAP no dashboard
+
+# ------------------------------------------------------------------------------
+# MLFLOW / TRACKING
+# ------------------------------------------------------------------------------
+tracking:
+  enabled: true
+  backend: "mlflow"  # mlflow, wandb, none
+  
+  mlflow:
+    tracking_uri: "mlruns"
+    experiment_name: "experiment_default"
+    auto_log: true
+    log_models: true
+    log_metrics: true
+    log_params: true
+    log_artifacts: true
+
+# ------------------------------------------------------------------------------
+# API
+# ------------------------------------------------------------------------------
+api:
+  enabled: true
+  framework: "fastapi"  # fastapi, flask
+  
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  debug: false
+  
+  # CORS
+  cors:
+    enabled: true
+    origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+    
+  # Rate Limiting
+  rate_limit:
+    enabled: false
+    requests: 100
+    period: 60  # segundos
+    
+  # Batch prediction
+  batch:
+    max_size: 1000        # Máximo de registros por requisição batch
+    
+  # Precisão de métricas na resposta
+  response:
+    metric_precision: 4   # Casas decimais nas métricas
+
+# ------------------------------------------------------------------------------
+# DASHBOARD
+# ------------------------------------------------------------------------------
+dashboard:
+  enabled: true
+  framework: "streamlit"  # streamlit, gradio
+  
+  host: "0.0.0.0"
+  port: 8501
+  
+  pages:
+    - home
+    - prediction
+    - analysis
+    - metrics
+    - mlflow
+
+# ------------------------------------------------------------------------------
+# DATA DRIFT MONITORING
+# ------------------------------------------------------------------------------
+drift:
+  psi_thresholds:
+    none: 0.10
+    low: 0.20
+    moderate: 0.25
+  psi_bins: 10
+  escalation:
+    moderate_feature_count: 2
+    low_feature_fraction: 0.3
+  simulation:
+    drift_intensity_default: 0.3
+    noise_factor_default: 0.1
+    sample_fraction: 1.0
+  # Quantile clipping para dados numéricos de produção
+  quantile_clip:
+    lower: 0.01
+    upper: 0.99
+
+# ------------------------------------------------------------------------------
+# CLASSIFICAÇÃO DE RISCO
+# ------------------------------------------------------------------------------
+risk:
+  threshold_low: 0.4
+  threshold_high: 0.7
+
+# ------------------------------------------------------------------------------
+# LOGGING
+# ------------------------------------------------------------------------------
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Arquivo de log
+  file:
+    enabled: true
+    path: "logs/pipeline.log"
+    max_bytes: 10485760  # 10 MB
+    backup_count: 5
+    
+  # Console
+  console:
+    enabled: true
+    colored: true
+
+# ------------------------------------------------------------------------------
+# DOCKER
+# ------------------------------------------------------------------------------
+docker:
+  base_image: "python:3.11-slim"
+  port_api: 8000
+  port_dashboard: 8501
