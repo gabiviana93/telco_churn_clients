@@ -28,6 +28,7 @@ Este guia fornece instruções passo a passo para testar e executar todos os com
 | Poetry | 1.5+ | `poetry --version` |
 | Git | 2.0+ | `git --version` |
 | Docker | 24+ (opcional) | `docker --version` |
+| Docker Compose | v2+ (opcional) | `docker compose version` |
 
 ### Instalar Poetry (se necessário)
 
@@ -239,8 +240,14 @@ A documentação interativa permite testar todos os endpoints diretamente no nav
 ### 6.1 Iniciar Dashboard Streamlit
 
 ```bash
-# Iniciar dashboard
+# Local
 poetry run streamlit run scripts/dashboard.py --server.port 8501
+
+# Via Docker (sobe API + Dashboard juntos)
+docker compose up dashboard
+
+# Via Makefile
+make dashboard
 ```
 
 Acesse: **http://localhost:8501**
@@ -261,20 +268,71 @@ Acesse: **http://localhost:8501**
 
 ## 6.5 Executar com Docker
 
+O Docker é a forma mais simples de executar todos os serviços em produção.
+
+### Subir Todos os Serviços
+
 ```bash
-# Build e execução
+# API (porta 8000) + Dashboard (porta 8501)
+docker compose up --build
+
+# Em background
+docker compose up -d
+```
+
+### Subir Serviços Individuais
+
+```bash
+# Apenas a API
 docker compose up api
 
-# Ou build manual
-docker build --target production -t churn-api .
-docker run -p 8000:8000 -v ./models:/app/models:ro churn-api
+# Apenas o Dashboard (inicia a API automaticamente)
+docker compose up dashboard
 
-# Verificar container
+# API em modo desenvolvimento (hot reload)
+docker compose --profile dev up api-dev
+
+# Com MLflow Tracking Server
+docker compose --profile mlflow up
+```
+
+### Acessar Serviços
+
+| Serviço | URL |
+|---------|-----|
+| API (Swagger) | http://localhost:8000/docs |
+| Dashboard | http://localhost:8501 |
+| MLflow | http://localhost:5000 |
+
+### Gerenciar Containers
+
+```bash
+# Ver status dos containers
 docker ps
-docker logs churn-api
 
-# Parar
+# Ver logs em tempo real
+docker compose logs -f
+docker compose logs -f dashboard
+
+# Parar tudo
 docker compose down
+
+# Rebuild após alterações no código
+docker compose up --build --force-recreate
+```
+
+### Build Manual de Imagens
+
+```bash
+# Build da API
+docker build --target production -t churn-api .
+
+# Build do Dashboard
+docker build --target dashboard -t churn-dashboard .
+
+# Executar manualmente
+docker run -p 8000:8000 -v ./models:/app/models:ro churn-api
+docker run -p 8501:8501 -v ./models:/app/models:ro churn-dashboard
 ```
 
 ---
@@ -439,7 +497,7 @@ Execute este checklist para validar que tudo está funcionando:
 ```bash
 # 1. Testes unitários
 poetry run pytest tests/ -v
-# Esperado: 103 passed
+# Esperado: 190 passed
 
 # 2. API - Health
 curl http://localhost:8000/health 2>/dev/null | grep -q "healthy" && echo "API OK" || echo "API FAIL"

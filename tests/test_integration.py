@@ -322,7 +322,11 @@ class TestInferencePipeline:
     """Testa módulo de inferência end-to-end."""
 
     def test_load_model_package(self):
+        from src.config import MODEL_PATH
         from src.inference import load_model_package
+
+        if not MODEL_PATH.exists():
+            pytest.skip("Model file not available (CI environment)")
 
         package = load_model_package()
         assert package is not None

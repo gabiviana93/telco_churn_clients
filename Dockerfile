@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Builder
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim as builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN poetry install --no-interaction --no-ansi --only main --no-root
 # -----------------------------------------------------------------------------
 # Stage 2: Production
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim as production
+FROM python:3.12-slim AS production
 
 WORKDIR /app
 
@@ -80,9 +80,23 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # -----------------------------------------------------------------------------
-# Stage 3: Development
+# Stage 3: Dashboard (Streamlit)
 # -----------------------------------------------------------------------------
-FROM production as development
+FROM production AS dashboard
+
+# Override port for Streamlit
+ENV PORT=8501
+EXPOSE 8501
+
+# Run Streamlit dashboard
+CMD ["python", "-m", "streamlit", "run", "scripts/dashboard.py", \
+    "--server.port=8501", "--server.address=0.0.0.0", \
+    "--server.headless=true", "--browser.gatherUsageStats=false"]
+
+# -----------------------------------------------------------------------------
+# Stage 4: Development
+# -----------------------------------------------------------------------------
+FROM production AS development
 
 USER root
 

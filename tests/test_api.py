@@ -92,8 +92,13 @@ class TestHealthEndpoints:
     def test_readiness_probe(self, client):
         """Testa endpoint de readiness probe."""
         response = client.get("/health/ready")
-        assert response.status_code == 200
-        # Status depende do modelo estar carregado
+        assert response.status_code in (200, 503)
+        data = response.json()
+        assert "status" in data
+        if response.status_code == 200:
+            assert data["status"] == "ready"
+        else:
+            assert data["status"] == "not ready"
 
 
 class TestPredictionEndpoints:

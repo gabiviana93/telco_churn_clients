@@ -3,7 +3,7 @@
 # =============================================================================
 # Common commands for development and deployment
 
-.PHONY: help install dev test lint format api docker clean
+.PHONY: help install dev test lint format api docker clean ci
 
 # Default target
 help:
@@ -19,14 +19,21 @@ help:
 	@echo "  make format     - Format code with black and isort"
 	@echo "  make check      - Run all checks (lint + test)"
 	@echo ""
+	@echo "CI/CD Local:"
+	@echo "  make ci         - Run full CI pipeline locally (lint+imports+tests+ml+quality)"
+	@echo "  make ci-lint    - Run only lint checks"
+	@echo "  make ci-tests   - Run only tests with coverage"
+	@echo "  make ci-docker  - Build Docker images locally"
+	@echo "  make ci-all     - Full CI + Docker build"
+	@echo ""
 	@echo "API:"
 	@echo "  make api        - Run API in development mode"
 	@echo "  make api-prod   - Run API in production mode"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-run   - Run Docker container"
-	@echo "  make docker-up    - Start all services with docker-compose"
+	@echo "  make docker-build - Build Docker images (api + dashboard)"
+	@echo "  make docker-up    - Start API + Dashboard"
+	@echo "  make docker-down  - Stop all containers"
 	@echo ""
 	@echo "MLflow:"
 	@echo "  make mlflow     - Start MLflow UI"
@@ -87,23 +94,40 @@ api-prod:
 	poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 # =============================================================================
+# CI/CD Local
+# =============================================================================
+
+ci:
+	@bash scripts/test_ci_locally.sh ci
+
+ci-lint:
+	@bash scripts/test_ci_locally.sh lint
+
+ci-tests:
+	@bash scripts/test_ci_locally.sh tests
+
+ci-docker:
+	@bash scripts/test_ci_locally.sh docker
+
+ci-all:
+	@bash scripts/test_ci_locally.sh all
+
+# =============================================================================
 # Docker
 # =============================================================================
 
 docker-build:
-	docker build -t churn-api .
-
-docker-run:
-	docker run -p 8000:8000 churn-api
+	docker build --target production -t churn-api .
+	docker build --target dashboard -t churn-dashboard .
 
 docker-up:
-	docker-compose up -d api
+	docker compose up --build -d
 
 docker-down:
-	docker-compose down
+	docker compose down
 
 docker-logs:
-	docker-compose logs -f api
+	docker compose logs -f
 
 # =============================================================================
 # MLflow

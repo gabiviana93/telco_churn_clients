@@ -24,7 +24,7 @@ services:
       - ./models:/app/models:ro
       - ./reports:/app/reports:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health/live" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -77,6 +77,29 @@ services:
       - mlflow-data:/mlruns
     profiles:
       - mlflow
+
+  # ---------------------------------------------------------------------------
+  # Streamlit Dashboard
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    container_name: churn-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_HOST=api
+      - API_PORT=8000
+    volumes:
+      - ./models:/app/models:ro
+      - ./reports:/app/reports:ro
+      - ./config:/app/config:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   mlflow-data:

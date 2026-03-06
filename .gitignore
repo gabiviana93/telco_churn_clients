@@ -226,11 +226,15 @@ POETRY_GUIDE.md
 SOLUTION_SUMMARY.md
 test_pipeline.py
 
-# Data files
-src/data/
+# Data files (keep raw dataset for Streamlit Community Cloud)
+src/data/*
+!src/data/raw/
+src/data/raw/*
+!src/data/raw/*.csv
 
-# Model artifacts
-models/
+# Model artifacts (keep default model for Streamlit Community Cloud)
+models/*
+!models/model.joblib
 
 # CatBoost training cache
 catboost_info/
