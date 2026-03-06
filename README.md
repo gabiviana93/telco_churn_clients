@@ -90,7 +90,6 @@ Este projeto demonstra competências em todo o ciclo de Data Science:
 
 ### MLOps & Production
 - **Tracking**: MLflow para experimentos
-- **Containerização**: Docker e docker-compose
 - **API REST**: FastAPI com validação Pydantic
 - **Testing**: 190 testes pytest com 74% coverage
 - **Containerização**: Docker multi-stage com docker-compose
