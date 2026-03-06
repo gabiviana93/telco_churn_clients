@@ -44,23 +44,23 @@ def main():
         pipeline.fit(X_train, y_train, validate=True)
 
         # 4. Avaliar no conjunto de teste
-        metrics = pipeline.evaluate(X_test, y_test)
+        test_metrics = pipeline.evaluate(X_test, y_test)
 
-        # Adicionar métricas de cross-validation ao resultado (já vêm prefixadas com "cv_")
-        metrics.update(pipeline.metrics)
+        # Combinar métricas de teste + cross-validation para log completo
+        all_metrics = {**test_metrics, **pipeline.cv_metrics}
 
         # Logar métricas no MLflow
-        mlflow.log_metrics(metrics)
+        mlflow.log_metrics(all_metrics)
 
         # 5. Salvar métricas em JSON
         with open(REPORTS_DIR / "metrics.json", "w") as f:
-            json.dump(metrics, f, indent=4)
+            json.dump(all_metrics, f, indent=4)
 
         # 6. Salvar modelo
         model_path = MODELS_DIR / "model.joblib"
         pipeline.save(model_path)
 
-        print(f"Pipeline concluído. Métricas: {metrics}")
+        print(f"Pipeline concluído. Métricas de teste: {test_metrics}")
 
 
 if __name__ == "__main__":

@@ -86,7 +86,8 @@ class ChurnPipeline:
         self.numeric_features = numeric_features
         self.categorical_features = categorical_features
         self.pipeline: Pipeline | None = None
-        self.metrics: dict[str, float] = {}
+        self.cv_metrics: dict[str, float] = {}
+        self.test_metrics: dict[str, float] = {}
         self._is_fitted = False
 
     def _build_pipeline(self, X: pd.DataFrame) -> Pipeline:
@@ -145,9 +146,9 @@ class ChurnPipeline:
 
         # Cross-validation if requested
         if validate:
-            self.metrics = self._cross_validate(X, y, n_splits)
+            self.cv_metrics = self._cross_validate(X, y, n_splits)
 
-        logger.info("Pipeline training completed", extra={"metrics": self.metrics})
+        logger.info("Pipeline training completed", extra={"cv_metrics": self.cv_metrics})
         return self
 
     def _cross_validate(
@@ -238,6 +239,7 @@ class ChurnPipeline:
             "threshold": threshold,
         }
 
+        self.test_metrics = metrics
         logger.info("Evaluation completed", extra=metrics)
         return metrics
 
@@ -284,7 +286,9 @@ class ChurnPipeline:
         package = {
             "pipeline": self.pipeline,
             "config": self.config,
-            "metrics": self.metrics,
+            "metrics": {**self.cv_metrics, **self.test_metrics},
+            "cv_metrics": self.cv_metrics,
+            "test_metrics": self.test_metrics,
             "numeric_features": self.numeric_features,
             "categorical_features": self.categorical_features,
         }
@@ -311,11 +315,22 @@ class ChurnPipeline:
             categorical_features=package.get("categorical_features"),
         )
         instance.pipeline = package["pipeline"]
-        instance.metrics = package.get("metrics", {})
+        instance.cv_metrics = package.get("cv_metrics", {})
+        instance.test_metrics = package.get("test_metrics", {})
+        # Backward compatibility: old packages without separated metrics
+        if not instance.cv_metrics and not instance.test_metrics:
+            all_metrics = package.get("metrics", {})
+            instance.cv_metrics = {k: v for k, v in all_metrics.items() if k.startswith("cv_")}
+            instance.test_metrics = {k: v for k, v in all_metrics.items() if not k.startswith("cv_")}
         instance._is_fitted = True
 
         logger.info(f"Pipeline loaded from {path}")
         return instance
+
+    @property
+    def metrics(self) -> dict[str, float]:
+        """Métricas combinadas (CV + teste) para backward compatibility."""
+        return {**self.cv_metrics, **self.test_metrics}
 
     @property
     def sklearn_pipeline(self) -> Pipeline:
