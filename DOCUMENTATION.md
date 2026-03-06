@@ -106,7 +106,11 @@ churn_clientes/
 ├── reports/                      # Relatórios gerados
 ├── mlruns/                       # Tracking MLflow
 ├── optuna_studies/               # Cache de estudos Optuna
+├── logs/                         # Logs do pipeline
 │
+├── Dockerfile                    # Multi-stage build (builder → production → dashboard → dev)
+├── docker-compose.yml            # Orquestração (api, dashboard, api-dev, mlflow)
+├── Makefile                      # Comandos de automação (make test, make api, make dashboard)
 ├── pyproject.toml                # Configuração Poetry
 ├── requirements.txt              # Dependências (pip) - sincronizado
 ├── QUICKSTART.md                 # Guia de início rápido
@@ -726,7 +730,78 @@ docker run -p 8000:8000 -v ./models:/app/models:ro churn-api
 O Dockerfile usa multi-stage build:
 - **builder**: Instala Poetry e dependências
 - **production**: Imagem slim com `libgomp1` (requerido por LightGBM/CatBoost)
+- **dashboard**: Streamlit em modo headless na porta 8501
 - **development**: Adiciona ferramentas de dev (pytest, ruff, etc.)
+
+### Docker Compose — Serviços
+
+| Serviço | Container | Porta | Profile | Descrição |
+|---------|-----------|:-----:|---------|----------|
+| `api` | churn-api | 8000 | — | API REST com healthcheck |
+| `dashboard` | churn-dashboard | 8501 | — | Dashboard Streamlit (depende da API) |
+| `api-dev` | churn-api-dev | 8000 | `dev` | API com hot reload |
+| `mlflow` | mlflow-server | 5000 | `mlflow` | MLflow Tracking Server |
+
+### Comandos Docker
+
+```bash
+# Subir API + Dashboard
+docker compose up --build
+
+# Subir em background
+docker compose up -d
+
+# Subir apenas a API
+docker compose up api
+
+# Subir apenas o Dashboard (inicia a API automaticamente)
+docker compose up dashboard
+
+# Subir com MLflow
+docker compose --profile mlflow up
+
+# API em modo desenvolvimento (hot reload + volumes)
+docker compose --profile dev up api-dev
+
+# Ver logs
+docker compose logs -f
+docker compose logs -f dashboard
+
+# Rebuild após mudanças
+docker compose up --build --force-recreate
+
+# Build manual de um stage
+docker build --target production -t churn-api .
+docker build --target dashboard -t churn-dashboard .
+
+# Parar tudo
+docker compose down
+```
+
+### Comunicação entre Containers
+
+O Dashboard se comunica com a API via rede interna do Docker:
+- Variável `API_HOST=api` aponta para o nome do serviço (resolvido pelo DNS do Docker)
+- Variável `API_PORT=8000` define a porta interna
+- O Dashboard só inicia após o healthcheck da API passar (`depends_on` com `condition: service_healthy`)
+
+### Volumes
+
+| Volume | Container | Modo | Conteúdo |
+|--------|-----------|------|--------|
+| `./models` | api, dashboard | `ro` | Modelos .joblib |
+| `./reports` | api, dashboard | `ro` | Métricas e relatórios |
+| `./config` | dashboard | `ro` | Configurações YAML |
+| `mlflow-data` | mlflow | `rw` | Artefatos MLflow |
+
+### URLs de Acesso
+
+| Serviço | URL |
+|---------|-----|
+| API (Swagger) | http://localhost:8000/docs |
+| API (ReDoc) | http://localhost:8000/redoc |
+| Dashboard | http://localhost:8501 |
+| MLflow | http://localhost:5000 |
 
 ---
 
@@ -812,15 +887,24 @@ curl -X POST "http://localhost:8000/predict/" \
 
 ## Dashboard (Streamlit)
 
-### Iniciar Dashboard
+### Dashboard Streamlit
+
+#### Iniciar Dashboard
 
 ```bash
+# Local
 poetry run streamlit run scripts/dashboard.py
+
+# Via Docker
+docker compose up dashboard
+
+# Via Makefile
+make dashboard
 ```
 
 Acesse: http://localhost:8501
 
-### Funcionalidades
+#### Funcionalidades
 
 1. **Home**: Visão geral do projeto, métricas e modelo ativo
 2. **Predição**: Interface interativa para fazer predições (API-first com fallback local)
@@ -1063,6 +1147,14 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ---
 
 ## Changelog
+
+### v1.5.1 (Março 2026)
+
+#### Docker & Dashboard
+- **Dashboard no Docker**: Novo stage `dashboard` no Dockerfile (Streamlit headless na porta 8501)
+- **docker-compose**: Novo serviço `dashboard` com `depends_on` API healthcheck
+- **Comunicação entre containers**: Dashboard usa rede interna Docker (`API_HOST=api`)
+- **Documentação atualizada**: README, DOCUMENTATION, QUICKSTART e QUICK_REFERENCE com instruções Docker completas
 
 ### v1.5.0 (Março 2026)
 

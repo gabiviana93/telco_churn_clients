@@ -354,10 +354,14 @@ jobs:
       - name: Build Docker image (production)
         run: docker build --target production -t churn-api:${{ github.sha }} .
 
-      - name: Verificar imagem
+      - name: Build Docker image (dashboard)
+        run: docker build --target dashboard -t churn-dashboard:${{ github.sha }} .
+
+      - name: Verificar imagens
         run: |
           docker images churn-api:${{ github.sha }}
-          echo "Docker image construída com sucesso"
+          docker images churn-dashboard:${{ github.sha }}
+          echo "Docker images construídas com sucesso"
 
   # ---------------------------------------------------------------------------
   # Status final

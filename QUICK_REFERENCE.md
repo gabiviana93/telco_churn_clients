@@ -123,10 +123,17 @@ poetry run python scripts/test_pipeline.py # Testar end-to-end
 # MLflow
 mlflow ui --port 5000                   # Dashboard MLflow
 
-# Docker
-docker compose up api                  # API em container
+# Docker - Serviços individuais
+docker compose up api                   # Apenas API (porta 8000)
+docker compose up dashboard             # Dashboard + API (porta 8501)
 
-# Dashboard
+# Docker - Todos os serviços
+docker compose up --build               # API + Dashboard
+docker compose --profile mlflow up      # + MLflow (porta 5000)
+docker compose --profile dev up api-dev # API em modo dev (hot reload)
+docker compose down                     # Parar tudo
+
+# Dashboard (local, sem Docker)
 poetry run streamlit run scripts/dashboard.py  # Monitoramento
 ```
 

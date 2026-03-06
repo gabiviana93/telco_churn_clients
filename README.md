@@ -13,6 +13,7 @@
 [![MLflow](https://img.shields.io/badge/MLflow-2.22-0194E2.svg)](https://mlflow.org/)
 [![Tests](https://img.shields.io/badge/tests-190%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-74%25-green.svg)]()
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.54-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -89,7 +90,6 @@ Este projeto demonstra competências em todo o ciclo de Data Science:
 
 ### MLOps & Production
 - **Tracking**: MLflow para experimentos
-- **Containerização**: Docker e docker-compose
 - **API REST**: FastAPI com validação Pydantic
 - **Testing**: 190 testes pytest com 74% coverage
 - **Containerização**: Docker multi-stage com docker-compose
@@ -98,6 +98,7 @@ Este projeto demonstra competências em todo o ciclo de Data Science:
 ### Software Engineering
 - **Clean Architecture**: separação de responsabilidades
 - **Design Patterns**: Factory, Strategy, Singleton
+- **Docker**: Multi-stage build com 4 stages e docker-compose
 - **Documentation**: docstrings, type hints, markdown
 - **Code Quality**: Ruff, Black, pre-commit
 
@@ -130,11 +131,27 @@ poetry install
 ### Docker (Produção)
 
 ```bash
-# Build e execução com docker-compose
+# API + Dashboard (sobe os dois serviços juntos)
+docker compose up --build
+
+# Apenas a API
 docker compose up api
 
-# Acesse: http://localhost:8000/docs
+# Apenas o Dashboard (depende da API)
+docker compose up dashboard
+
+# Com MLflow Tracking Server
+docker compose --profile mlflow up
+
+# API em modo desenvolvimento (hot reload)
+docker compose --profile dev up api-dev
 ```
+
+| Serviço | URL | Descrição |
+|---------|-----|----------|
+| API (Swagger) | http://localhost:8000/docs | Documentação interativa da API |
+| Dashboard | http://localhost:8501 | Dashboard Streamlit interativo |
+| MLflow | http://localhost:5000 | Tracking de experimentos (profile `mlflow`) |
 
 ### Treinar o Modelo
 
@@ -239,8 +256,8 @@ churn_clientes/
 ├── models/                       # Modelos treinados (.joblib)
 ├── reports/                      # Relatórios (metrics.json, drift.json)
 ├── config/                       # Configurações YAML (project.yaml)
-├── Dockerfile                    # Multi-stage build (builder → production → dev)
-├── docker-compose.yml            # Orquestração de serviços
+├── Dockerfile                    # Multi-stage build (builder → production → dashboard → dev)
+├── docker-compose.yml            # Orquestração (api, dashboard, api-dev, mlflow)
 └── .github/workflows/            # CI/CD (ci.yml, code-quality.yml, pr-analysis.yml)
 ```
 
@@ -348,6 +365,85 @@ make test
 
 ---
 
+## Docker
+
+O projeto usa **Docker multi-stage build** com 4 stages e **docker-compose** para orquestrar os serviços.
+
+### Arquitetura dos Containers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    docker-compose                           │
+├─────────────────┬──────────────────┬────────────────────────┤
+│   api (8000)    │ dashboard (8501) │  mlflow (5000)         │
+│   FastAPI +     │  Streamlit       │  MLflow Tracking       │
+│   Uvicorn       │  (depende da     │  (profile: mlflow)     │
+│                 │   API)           │                        │
+├─────────────────┴──────────────────┴────────────────────────┤
+│                 Rede interna Docker                         │
+│          dashboard → http://api:8000 (interno)              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Dockerfile Stages
+
+| Stage | Base | Porta | Descrição |
+|-------|------|:-----:|----------|
+| `builder` | python:3.12-slim | — | Instala Poetry e dependências |
+| `production` | python:3.12-slim | 8000 | API FastAPI com Uvicorn |
+| `dashboard` | production | 8501 | Dashboard Streamlit (headless) |
+| `development` | production | 8000 | API + ferramentas de dev (pytest, ruff) |
+
+### Serviços docker-compose
+
+| Serviço | Container | Porta | Profile | Descrição |
+|---------|-----------|:-----:|---------|----------|
+| `api` | churn-api | 8000 | — | API REST (produção) com healthcheck |
+| `dashboard` | churn-dashboard | 8501 | — | Dashboard Streamlit, depende da API |
+| `api-dev` | churn-api-dev | 8000 | `dev` | API com hot reload e volumes montados |
+| `mlflow` | mlflow-server | 5000 | `mlflow` | MLflow Tracking Server com SQLite |
+
+### Comandos Docker
+
+```bash
+# Subir API + Dashboard
+docker compose up --build
+
+# Subir em background
+docker compose up -d
+
+# Subir com MLflow
+docker compose --profile mlflow up -d
+
+# Ver logs
+docker compose logs -f
+docker compose logs -f dashboard
+
+# Parar tudo
+docker compose down
+
+# Rebuild após alterações
+docker compose up --build --force-recreate
+
+# Build manual de um stage específico
+docker build --target production -t churn-api .
+docker build --target dashboard -t churn-dashboard .
+```
+
+### Variáveis de Ambiente (Docker)
+
+| Variável | Serviço | Default | Descrição |
+|----------|---------|---------|----------|
+| `HOST` | api | `0.0.0.0` | Host de bind |
+| `PORT` | api | `8000` | Porta da API |
+| `DEBUG` | api | `false` | Modo debug |
+| `LOG_LEVEL` | api | `INFO` | Nível de log |
+| `MODEL_PATH` | api | `/app/models/model.joblib` | Caminho do modelo |
+| `API_HOST` | dashboard | `api` | Host da API (rede interna Docker) |
+| `API_PORT` | dashboard | `8000` | Porta da API |
+
+---
+
 ## Customização para Novos Projetos
 
 Este projeto foi estruturado como **template** para novos projetos de ML:
@@ -426,6 +522,7 @@ make type-check
 | **[DOCUMENTATION.md](DOCUMENTATION.md)** | Documentação técnica completa |
 | **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | Referência rápida para adaptação |
 | **[API Swagger](http://localhost:8000/docs)** | Documentação interativa da API |
+| **[Dashboard](http://localhost:8501)** | Dashboard Streamlit (via Docker ou local) |
 
 ---
 
