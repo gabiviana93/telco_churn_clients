@@ -253,6 +253,9 @@ def main():
             }
             for name, m in individual_metrics.items()
         },
+        # Top-level canonical keys (consumed by dashboard / normalize_metrics_keys)
+        **best_metrics,
+        # Prefixed duplicates kept for explicitness
         **{f"test_{k}": v for k, v in best_metrics.items()},
     }
     metrics_path = REPORTS_DIR / "metrics.json"

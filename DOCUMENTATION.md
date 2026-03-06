@@ -1166,7 +1166,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 
 ## Changelog
 
-### v1.6.0 (Julho 2025)
+### v1.6.0 (Março 2026)
 
 #### Otimização Multi-Modelo
 - **optimize_model.py**: Novo script de otimização multi-modelo (LightGBM, XGBoost, CatBoost) com Optuna

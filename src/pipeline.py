@@ -334,6 +334,12 @@ class ChurnPipeline:
         """Métricas combinadas (CV + teste) para backward compatibility."""
         return {**self.cv_metrics, **self.test_metrics}
 
+    @metrics.setter
+    def metrics(self, value: dict[str, float]) -> None:
+        """Setter para backward compatibility: separa cv_ e test metrics."""
+        self.cv_metrics = {k: v for k, v in value.items() if k.startswith("cv_")}
+        self.test_metrics = {k: v for k, v in value.items() if not k.startswith("cv_")}
+
     @property
     def sklearn_pipeline(self) -> Pipeline:
         """Obtém o Pipeline sklearn subjacente."""
