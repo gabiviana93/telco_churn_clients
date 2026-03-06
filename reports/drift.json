@@ -1,0 +1,166 @@
+{
+    "timestamp": "2026-03-05T21:25:02.058679+00:00",
+    "features_checked": 19,
+    "features_with_drift": 0,
+    "severity_counts": {
+        "none": 19,
+        "low": 0,
+        "moderate": 0,
+        "high": 0
+    },
+    "overall_severity": "none",
+    "features": [
+        {
+            "name": "MonthlyCharges",
+            "psi": 0.0122,
+            "ks_statistic": 0.0321,
+            "ks_pvalue": 0.1912,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "tenure",
+            "psi": 0.0109,
+            "ks_statistic": 0.0212,
+            "ks_pvalue": 0.6835,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "SeniorCitizen",
+            "psi": 0.0002,
+            "ks_statistic": 0.0057,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "TotalCharges",
+            "psi": 0.0,
+            "ks_statistic": 0.0435,
+            "ks_pvalue": 0.027,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "gender",
+            "psi": 0.0,
+            "ks_statistic": 0.0096,
+            "ks_pvalue": 0.9999,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "Partner",
+            "psi": 0.0,
+            "ks_statistic": 0.0067,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "Dependents",
+            "psi": 0.0,
+            "ks_statistic": 0.0079,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "PhoneService",
+            "psi": 0.0,
+            "ks_statistic": 0.0119,
+            "ks_pvalue": 0.9965,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "MultipleLines",
+            "psi": 0.0,
+            "ks_statistic": 0.0238,
+            "ks_pvalue": 0.5371,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "InternetService",
+            "psi": 0.0,
+            "ks_statistic": 0.006,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "OnlineSecurity",
+            "psi": 0.0,
+            "ks_statistic": 0.007,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "OnlineBackup",
+            "psi": 0.0,
+            "ks_statistic": 0.031,
+            "ks_pvalue": 0.2232,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "DeviceProtection",
+            "psi": 0.0,
+            "ks_statistic": 0.0093,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "TechSupport",
+            "psi": 0.0,
+            "ks_statistic": 0.0123,
+            "ks_pvalue": 0.9945,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "StreamingTV",
+            "psi": 0.0,
+            "ks_statistic": 0.0253,
+            "ks_pvalue": 0.4552,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "StreamingMovies",
+            "psi": 0.0,
+            "ks_statistic": 0.0156,
+            "ks_pvalue": 0.9424,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "Contract",
+            "psi": 0.0,
+            "ks_statistic": 0.0027,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "PaperlessBilling",
+            "psi": 0.0,
+            "ks_statistic": 0.0049,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        },
+        {
+            "name": "PaymentMethod",
+            "psi": 0.0,
+            "ks_statistic": 0.0079,
+            "ks_pvalue": 1.0,
+            "severity": "none",
+            "has_drift": false
+        }
+    ]
+}

@@ -131,32 +131,35 @@ make format         # Formatar código
 
 ## 4. Treinar Modelo
 
-### 4.1 Treino Rápido (para testes)
+### 4.1 Treino Padrão
 
 ```bash
-# Treino com parâmetros default (~2 min)
-poetry run python scripts/train_pipeline.py --quick
+# Treino com LightGBM e parâmetros do config/project.yaml (~2 min)
+poetry run python scripts/train_pipeline.py
 ```
 
-### 4.2 Treino com Otimização Optuna
+### 4.2 Pipeline Completo (Treino + Avaliação + Salvar)
 
 ```bash
-# Treino com otimização de hiperparâmetros (~10 min)
-poetry run python scripts/train_pipeline.py --mode optimized --trials 30
+# Treina, avalia, salva modelo e métricas (reports/metrics.json)
+poetry run python scripts/run_pipeline.py
 ```
 
-### 4.3 Treino com Ensemble (máximo F1 - recomendado)
+### 4.3 Otimização Multi-Modelo
 
 ```bash
-# Treino com ensemble XGBoost + LightGBM e otimização Optuna
-poetry run python scripts/train_pipeline.py --mode ensemble --trials 100
+# Otimização rápida (~5 min): 10 trials × 3 modelos, 3-fold CV
+poetry run python scripts/optimize_model.py --quick
 
-# Opções disponíveis:
-#   --mode MODE    Modo de treino: quick, optimized, ensemble (default: optimized)
-#   --quick        Atalho para --mode quick
-#   --trials N     Número de trials Optuna (default: 100)
-#   --no-smote     Desabilitar SMOTE
+# Otimização completa (~20 min): 20 trials × 3 modelos, 5-fold CV
+poetry run python scripts/optimize_model.py
+
+# Ou via Makefile:
+make train-quick      # Rápido
+make train-optimized  # Completo
 ```
+
+Compara LightGBM, XGBoost e CatBoost. O melhor modelo é salvo como `model.joblib`.
 
 ### 4.4 Verificar Modelo Treinado
 
@@ -342,7 +345,7 @@ docker run -p 8501:8501 -v ./models:/app/models:ro churn-dashboard
 ### 7.1 Via Pipeline (Treino + Avaliação)
 
 ```bash
-# Executar pipeline completo (treino + avaliação + salvar modelo)
+# Executar pipeline completo (treino + avaliação + salvar modelo e métricas)
 poetry run python scripts/run_pipeline.py
 ```
 
@@ -440,7 +443,7 @@ poetry run jupyter nbconvert --execute notebooks/03_modeling.ipynb --to html
 
 ```bash
 # Solução: Treinar modelo primeiro
-poetry run python scripts/train_pipeline.py --quick
+poetry run python scripts/train_pipeline.py
 ```
 
 ### Erro: "Port already in use"

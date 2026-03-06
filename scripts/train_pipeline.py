@@ -35,9 +35,9 @@ def main():
         pipeline = ChurnPipeline(config=config)
         pipeline.fit(X_train, y_train, validate=True)
 
-        # Logar parâmetros e métricas no MLflow
+        # Logar parâmetros e métricas de CV no MLflow
         mlflow.log_params(config.to_dict())
-        mlflow.log_metrics(pipeline.metrics)
+        mlflow.log_metrics(pipeline.cv_metrics)
 
         # 6. Avaliar no conjunto de teste
         metrics = pipeline.evaluate(X_test, y_test)
@@ -47,7 +47,7 @@ def main():
         model_path = MODELS_DIR / "model.joblib"
         pipeline.save(model_path)
 
-        print(f"CV Metrics: {pipeline.metrics}")
+        print(f"CV Metrics: {pipeline.cv_metrics}")
         print(f"Test Metrics: {metrics}")
         print(f"Modelo salvo em: {model_path}")
 

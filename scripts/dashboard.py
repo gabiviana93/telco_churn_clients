@@ -1576,7 +1576,11 @@ def render_model_comparison():
                     # Tenta inferir pelo tipo do modelo
                     model_obj = package.get("model") or package.get("pipeline")
                     if model_obj is not None:
-                        model_type = type(model_obj).__name__.lower()
+                        # Se for um sklearn Pipeline, inspeciona o último step
+                        estimator = model_obj
+                        if hasattr(model_obj, "steps"):
+                            estimator = model_obj.steps[-1][1]
+                        model_type = type(estimator).__name__.lower()
                         if "lightgbm" in model_type or "lgbm" in model_type:
                             algorithm = "LightGBM"
                         elif "xgb" in model_type:
