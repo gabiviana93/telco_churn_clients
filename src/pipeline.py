@@ -321,7 +321,9 @@ class ChurnPipeline:
         if not instance.cv_metrics and not instance.test_metrics:
             all_metrics = package.get("metrics", {})
             instance.cv_metrics = {k: v for k, v in all_metrics.items() if k.startswith("cv_")}
-            instance.test_metrics = {k: v for k, v in all_metrics.items() if not k.startswith("cv_")}
+            instance.test_metrics = {
+                k: v for k, v in all_metrics.items() if not k.startswith("cv_")
+            }
         instance._is_fitted = True
 
         logger.info(f"Pipeline loaded from {path}")
