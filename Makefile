@@ -3,7 +3,7 @@
 # =============================================================================
 # Common commands for development and deployment
 
-.PHONY: help install dev test lint format api docker clean ci
+.PHONY: help install dev test lint format api docker clean ci ci-lint ci-tests ci-docker ci-all
 
 # Default target
 help:
