@@ -1248,7 +1248,7 @@ Veja a seção de Changelog abaixo para detalhes completos.
 
 - [QUICKSTART.md](QUICKSTART.md) - Guia de início rápido e testes
 - [README.md](README.md) - Visão geral do projeto
-- [QUICKSTART.md](QUICKSTART.md) - Guia de início rápido e testes
+- [Adaptation Guide](ADAPTATION_GUIDE.md) - Guia de adaptação do modelo ao seu contexto
 - [XGBoost Documentation](https://xgboost.readthedocs.io/)
 - [Optuna Documentation](https://optuna.org/)
 - [SHAP Documentation](https://shap.readthedocs.io/)
