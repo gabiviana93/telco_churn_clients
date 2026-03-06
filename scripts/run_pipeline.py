@@ -46,10 +46,8 @@ def main():
         # 4. Avaliar no conjunto de teste
         metrics = pipeline.evaluate(X_test, y_test)
 
-        # Adicionar métricas de CV ao resultado (prefixadas para evitar colisão)
-        for key, value in pipeline.metrics.items():
-            if key not in metrics:
-                metrics[key] = value
+        # Adicionar métricas de cross-validation ao resultado (já vêm prefixadas com "cv_")
+        metrics.update(pipeline.metrics)
 
         # Logar métricas no MLflow
         mlflow.log_metrics(metrics)
