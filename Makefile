@@ -39,7 +39,8 @@ help:
 	@echo "  make mlflow     - Start MLflow UI"
 	@echo ""
 	@echo "Training:"
-	@echo "  make train      - Run training pipeline"
+	@echo "  make train        - Run training pipeline"
+	@echo "  make run-pipeline - Run full training + evaluation pipeline"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean      - Remove cache and temporary files"
@@ -166,7 +167,7 @@ train-optimized:
 train-quick:
 	poetry run python scripts/train_pipeline.py --quick
 
-inference:
+run-pipeline:
 	poetry run python scripts/run_pipeline.py
 
 # =============================================================================
