@@ -183,6 +183,8 @@ def main():
         individual_metrics[name] = metrics
 
         # Salvar modelo com nome identificável
+        result.best_pipeline.test_metrics = metrics
+        result.best_pipeline.algorithm = name
         model_path = MODELS_DIR / f"model_{name}.joblib"
         result.best_pipeline.save(model_path)
 

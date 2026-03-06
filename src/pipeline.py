@@ -88,6 +88,7 @@ class ChurnPipeline:
         self.pipeline: Pipeline | None = None
         self.cv_metrics: dict[str, float] = {}
         self.test_metrics: dict[str, float] = {}
+        self.algorithm: str | None = None
         self._is_fitted = False
 
     def _build_pipeline(self, X: pd.DataFrame) -> Pipeline:
@@ -291,6 +292,12 @@ class ChurnPipeline:
             "test_metrics": self.test_metrics,
             "numeric_features": self.numeric_features,
             "categorical_features": self.categorical_features,
+            "algorithm": self.algorithm
+            or (
+                self.config.model_type.value
+                if hasattr(self.config.model_type, "value")
+                else str(self.config.model_type)
+            ),
         }
 
         dump(package, path)
@@ -317,6 +324,7 @@ class ChurnPipeline:
         instance.pipeline = package["pipeline"]
         instance.cv_metrics = package.get("cv_metrics", {})
         instance.test_metrics = package.get("test_metrics", {})
+        instance.algorithm = package.get("algorithm")
         # Backward compatibility: old packages without separated metrics
         if not instance.cv_metrics and not instance.test_metrics:
             all_metrics = package.get("metrics", {})
