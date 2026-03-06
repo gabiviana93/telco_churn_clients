@@ -35,7 +35,7 @@ Sistema de predição de churn (cancelamento) de clientes para empresas de telec
 - **Accuracy**: 79.7%
 - **Precision**: 64.8%
 - **Recall**: 51.6%
-- **Testes**: 190 passando (cobertura 74%)
+- **Testes**: 190 passando (cobertura 70%+)
 
 ### Stack Tecnológica
 - **Python 3.12+**
@@ -144,10 +144,10 @@ result = optimizer.optimize()
 ```python
 from src.optimization import quick_optimize, optimize_for_f1
 
-# Otimização rápida
-result = quick_optimize(X_train, y_train, n_trials=50)
+# Otimização rápida (default: n_trials=30, sem SMOTE, sem threshold)
+result = quick_optimize(X_train, y_train, n_trials=30)
 
-# Otimização focada em F1
+# Otimização focada em F1 (default: n_trials=50, com SMOTE + threshold)
 result = optimize_for_f1(X_train, y_train, n_trials=100)
 ```
 
@@ -171,7 +171,7 @@ X_test_fe = fe.transform(X_test)
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
 │   Dados Raw     │───▶│  Feature Eng.    │───▶│  Preprocessor    │
-│  (CSV/Parquet)  │    │  (63 features)   │    │  (Scale/Encode)  │
+│  (CSV/Parquet)  │    │  (67 features)   │    │  (Scale/Encode)  │
 └─────────────────┘    └──────────────────┘    └──────────────────┘
                                                         │
                                                         ▼
@@ -202,7 +202,7 @@ X_test_fe = fe.transform(X_test)
    - Features básicas (19): tenure, MonthlyCharges, etc.
    - Features derivadas: bins, ratios, flags
    - Features avançadas: risk scores, interactions
-   - **Total: 63 features (44 novas + 19 originais)**
+   - **Total: 67 features (48 novas + 19 originais)**
 
 4. **Pré-processamento**
    - StandardScaler ou RobustScaler para numéricas
@@ -271,45 +271,21 @@ poetry run python -c "from src.pipeline import ChurnPipeline; print('OK')"
 ### 1. Treinamento Padrão
 
 ```bash
-# Treinamento básico (modo optimized por default)
+# Treinamento com LightGBM (parâmetros definidos no config YAML)
 poetry run python scripts/train_pipeline.py
-
-# Com opções
-poetry run python scripts/train_pipeline.py \
-    --mode optimized \
-    --trials 50
 ```
 
-### 2. Treinamento Rápido
+### 2. Via Makefile
 
 ```bash
-# Treino rápido com parâmetros default (~2 min)
-poetry run python scripts/train_pipeline.py --quick
+# Treinamento padrão
+make train
+
+# Ou via Docker
+docker compose up api  # O modelo é carregado do diretório models/
 ```
 
-### 3. Treinamento com Ensemble
-
-```bash
-# Ensemble XGBoost + LightGBM com otimização Optuna
-poetry run python scripts/train_pipeline.py \
-    --mode ensemble \
-    --trials 200
-```
-
-**Parâmetros:**
-- `--mode`: Modo de treinamento (`quick`, `optimized`, `ensemble`; default: `optimized`)
-- `--quick`: Atalho para `--mode quick`
-- `--trials`: Número de trials Optuna (default: 100)
-- `--no-smote`: Desabilitar SMOTE
-
-### Inferir via CLI
-
-```bash
-# Modo interativo
-poetry run python scripts/run_pipeline.py
-```
-
-### 4. Apenas Feature Engineering
+### 3. Apenas Feature Engineering
 
 ```python
 from src.feature_engineering import AdvancedFeatureEngineer
@@ -319,7 +295,7 @@ df = pd.read_csv("src/data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv")
 
 fe = AdvancedFeatureEngineer()
 X_transformed = fe.fit_transform(df.drop("Churn", axis=1), df["Churn"])
-print(f"Features: {X_transformed.shape[1]}")  # 63 features
+print(f"Features: {X_transformed.shape[1]}")  # 67 features
 ```
 
 ---
@@ -352,35 +328,35 @@ print(f"Features: {X_transformed.shape[1]}")  # 63 features
 ### Features Derivadas (FeatureEngineer) [19]
 | Feature | Fórmula | Descrição |
 |---------|---------|-----------|
-| has_streaming | StreamingTV + StreamingMovies | Tem serviço de streaming |
-| has_support | TechSupport + OnlineSecurity | Tem suporte/segurança |
+| new_customer_flag | tenure == 0 | Flag de cliente novo |
+| tenure_group | pd.cut(tenure, bins) | Faixa de tenure (0-6m, 7-12m, etc.) |
 | avg_monthly_charge | TotalCharges / tenure | Cobrança média mensal |
-| charge_percentile | Quartil de MonthlyCharges | Faixa de cobrança |
-| is_senior_alone | SeniorCitizen & !Partner | Idoso sozinho |
-| tenure_contract_ratio | tenure / avg_tenure_contract | Razão tenure vs média |
-| contract_ordinal | 0, 1, 2 | Contrato ordenado |
-| contract_risk | Taxa churn por contrato | Risco por contrato |
-| is_new_customer | tenure < 12 | Cliente novo |
-| payment_risk | Taxa por método pagamento | Risco por pagamento |
-| is_high_value | MonthlyCharges > mediana | Cliente alto valor |
-| no_services | Sem serviços adicionais | Sem extras |
-| full_protection | Todos serviços proteção | Proteção completa |
-| tenure_charge_interaction | tenure * MonthlyCharges | Interação |
-| high_charge_new_customer | Alta cobrança + novo | Flag de risco |
-| fiber_no_protection | Fibra sem proteção | Flag de risco |
-| tenure_years | tenure / 12 | Tenure em anos |
-| tenure_sqrt | √tenure | Sqrt tenure |
-| tenure_log | log(tenure + 1) | Log tenure |
+| charges_mismatch_flag | divergência > 0.3 | Divergência entre charges esperado e real |
+| is_monthly_contract | Contract == "Month-to-month" | Contrato mensal |
+| long_term_contract | Contract ∈ {"One year", "Two year"} | Contrato de longo prazo |
+| MonthlyCharges_binned | Quartis de MonthlyCharges | Faixa de cobrança mensal |
+| is_high_MonthlyCharges | avg_monthly > mediana | Cobrança acima da mediana |
+| price_sensitive_contract | Mensal + MonthlyCharges alto | Sensibilidade a preço |
+| early_churn_risk | Mensal + tenure < 12 | Risco de churn precoce |
+| tenure_vs_contract_avg | tenure / avg_tenure_contrato | Comparativo com segmento |
+| contract_risk_ordinal | Ordinal por churn rate | Contrato ordenado por risco |
+| contract_churn_rate | Taxa churn por contrato | Risco por contrato (supervisionado) |
+| MonthlyCharges_log | log1p(MonthlyCharges) | Transformação log |
+| MonthlyCharges_squared | MonthlyCharges² | Transformação quadrática |
+| TotalCharges_log | log1p(TotalCharges) | Transformação log |
+| TotalCharges_squared | TotalCharges² | Transformação quadrática |
+| avg_monthly_charge_log | log1p(avg_monthly_charge) | Transformação log |
+| avg_monthly_charge_squared | avg_monthly_charge² | Transformação quadrática |
 
 ### Features Avançadas (AdvancedFeatureEngineer) [29]
 | Categoria | Features | Descrição |
 |-----------|----------|-----------|
-| **Serviços** | total_services, streaming_services, security_services | Contagem de serviços |
-| **Engajamento** | low_engagement, digital_only, family_account | Padrões de uso |
-| **Interações** | fiber_no_security, senior_monthly, new_high_value | Combinações de risco |
-| **Risk Scores** | churn_risk_score, high_risk_flag | Scores compostos |
-| **Lifecycle** | lifecycle_phase (new/growing/mature/loyal) | Fase do ciclo |
-| **Valor** | estimated_clv, cost_per_service | Valor do cliente |
+| **Serviços** | total_services, service_density, streaming_services, has_streaming, security_services, has_security | Contagem e proporção de serviços |
+| **Engajamento** | low_engagement, high_engagement, digital_only, family_account, family_stability | Padrões de uso e estabilidade |
+| **Interações** | fiber_no_security, streamer_unprotected, senior_monthly, new_high_value | Combinações de risco |
+| **Risk Scores** | churn_risk_score, high_risk_flag, very_high_risk_flag, internet_risk, payment_risk | Scores compostos e por categoria |
+| **Lifecycle** | lifecycle_new, lifecycle_early, lifecycle_mid, lifecycle_mature, tenure_years, tenure_sqrt | Fases do ciclo de vida |
+| **Valor** | estimated_clv, value_per_month, cost_per_service | Valor e custo do cliente |
 
 ---
 
@@ -388,58 +364,45 @@ print(f"Features: {X_transformed.shape[1]}")  # 63 features
 
 ### Modelos Disponíveis
 
-#### XGBoost (Padrão)
+#### XGBoost / LightGBM (compartilhado)
 ```python
-# Parâmetros otimizados
+# Espaço de busca definido em config/project.yaml
 {
-    'n_estimators': [100, 600],
-    'max_depth': [3, 12],
-    'learning_rate': [0.005, 0.3],
-    'subsample': [0.5, 1.0],
-    'colsample_bytree': [0.5, 1.0],
-    'min_child_weight': [1, 20],
-    'gamma': [0.0, 2.0],
-    'reg_alpha': [0.0, 3.0],
-    'reg_lambda': [0.0, 3.0],
-    'scale_pos_weight': [1.0, 10.0]
-}
-```
-
-#### LightGBM
-```python
-{
-    'n_estimators': [100, 600],
-    'max_depth': [3, 15],
-    'learning_rate': [0.005, 0.3],
-    'num_leaves': [10, 200],
-    'subsample': [0.5, 1.0],
-    'colsample_bytree': [0.5, 1.0],
-    'min_child_samples': [5, 100],
-    'reg_alpha': [0.0, 3.0],
-    'reg_lambda': [0.0, 3.0],
-    'scale_pos_weight': [1.0, 10.0]
+    'n_estimators': [100, 500],
+    'max_depth': [3, 10],
+    'learning_rate': [0.01, 0.3],
+    'num_leaves': [15, 127],       # LightGBM específico
+    'subsample': [0.6, 1.0],
+    'colsample_bytree': [0.6, 1.0],
+    'min_child_samples': [5, 100], # LightGBM específico
+    'reg_alpha': [0.0, 1.0],
+    'reg_lambda': [0.0, 1.0]
 }
 ```
 
 ### Ensemble
 
-```python
-VotingClassifier(
-    estimators=[
-        ('xgb', XGBClassifier(**best_xgb_params)),
-        ('lgbm', LGBMClassifier(**best_lgbm_params))
-    ],
-    voting='soft',
-    weights=[xgb_f1_score, lgbm_f1_score]
-)
+Configurado no `config/project.yaml` (desabilitado por padrão):
+
+```yaml
+# config/project.yaml
+model:
+  ensemble:
+    enabled: false
+    models:
+      - algorithm: "xgboost"
+        weight: 0.5
+      - algorithm: "lightgbm"
+        weight: 0.5
+    method: "voting"  # voting, stacking
 ```
 
 ### Otimização Optuna
 
 ```python
-# Configuração padrão
+# Configuração padrão (n_trials vem do config/project.yaml, default=50)
 OptimizationConfig(
-    n_trials=100,
+    n_trials=50,
     n_cv_splits=5,
     metric="f1",
     random_state=42
@@ -481,11 +444,12 @@ CATEGORICAL_FEATURES = [...]
 ### Variáveis de Ambiente
 
 ```bash
-# MLflow
-export MLFLOW_TRACKING_URI="sqlite:///mlruns/mlflow.db"
+# MLflow (padrão: "mlruns" — file-based)
+export MLFLOW_TRACKING_URI="mlruns"
 
-# Optuna (opcional - armazenamento em memória por padrão)
-# export OPTUNA_STORAGE="sqlite:///optuna_study.db"
+# API
+export API_HOST="0.0.0.0"
+export API_PORT="8000"
 ```
 
 ---
@@ -506,21 +470,27 @@ customer_df = pd.DataFrame([{
     "tenure": 24,
     "MonthlyCharges": 75.50,
     "Contract": "Month-to-month",
-    # ...
+    # ... demais features
 }])
-result = predict_with_package(package, customer_df)
-print(f"Churn: {result['prediction']}, Prob: {result['probability']:.2%}")
+
+# Retorna np.ndarray com predições (0 ou 1)
+predictions = predict_with_package(package, customer_df)
+print(f"Churn: {predictions[0]}")  # 0 ou 1
+
+# Com probabilidades: retorna tupla (predictions, probabilities)
+predictions, probas = predict_with_package(package, customer_df, return_proba=True)
+print(f"Churn: {predictions[0]}, Prob: {probas[0][1]:.2%}")
 ```
 
 ### API de Predição (exemplo)
 
 ```python
-# Usando o módulo de inferência
+# Usando o módulo de inferência diretamente
 from src.inference import load_model_package, predict_with_package
 
 package = load_model_package("models/model.joblib")
-prediction = predict_with_package(package, customer_data)
-print(f"Probabilidade de churn: {prediction['probability']:.2%}")
+predictions, probas = predict_with_package(package, customer_data, return_proba=True)
+print(f"Probabilidade de churn: {probas[0][1]:.2%}")
 ```
 
 ### Formato de Entrada
@@ -552,13 +522,31 @@ print(f"Probabilidade de churn: {prediction['probability']:.2%}")
 
 ### Formato de Saída
 
+#### Via `predict_with_package()` (módulo Python)
+```python
+# Sem probabilidades:
+predictions = predict_with_package(package, df)
+# → np.ndarray([0, 1, 0, 1, ...])
+
+# Com probabilidades:
+predictions, probas = predict_with_package(package, df, return_proba=True)
+# predictions → np.ndarray([0, 1, 0, 1, ...])
+# probas → np.ndarray([[0.85, 0.15], [0.22, 0.78], ...])  # [prob_no_churn, prob_churn]
+```
+
+#### Via API REST (`POST /predict/`)
 ```json
 {
-    "prediction": 1,
-    "probability": 0.78,
-    "risk_level": "high",
-    "threshold_used": 0.42,
-    "features_used": 67
+    "success": true,
+    "prediction": {
+        "customer_id": "123",
+        "churn_prediction": 1,
+        "churn_probability": 0.78,
+        "churn_risk": "HIGH",
+        "confidence": 0.56
+    },
+    "model_version": "1.3.0",
+    "timestamp": "2026-03-06T12:00:00Z"
 }
 ```
 
@@ -650,7 +638,7 @@ poetry run pytest tests/ --cov=src --cov-report=html
 # tests/test_optimization.py
 def test_default_values():
     config = OptimizationConfig()
-    assert config.n_trials == 100
+    assert config.n_trials == 50  # Valor do config/project.yaml
     assert config.use_smote is True
 
 ```
@@ -660,14 +648,20 @@ def test_default_values():
 ```python
 # conftest.py
 @pytest.fixture
-def sample_data():
-    return pd.read_csv(DATA_PATH).head(100)
+def sample_dataframe():
+    return pd.DataFrame({"age": [...], "income": [...], "city": [...], "target": [...]})
 
 @pytest.fixture
-def trained_pipeline(sample_data):
-    pipeline = ChurnPipeline()
-    pipeline.fit(X, y)
-    return pipeline
+def sample_trained_model():
+    # XGBClassifier treinado com make_classification
+    model = XGBClassifier(n_estimators=10, max_depth=2)
+    model.fit(X, y)
+    return model
+
+@pytest.fixture
+def sample_X_y():
+    # 100 amostras com 3 features
+    return X, y
 ```
 
 ---
@@ -1104,8 +1098,8 @@ smote = SMOTETomek(
 
 #### 3. F1-Score Baixo
 ```bash
-# Usar treinamento otimizado
-poetry run python scripts/train_pipeline.py --mode ensemble --trials 200
+# Retreinar o modelo com configurações ajustadas no config/project.yaml
+poetry run python scripts/train_pipeline.py
 ```
 
 #### 4. Optuna Study não salva
@@ -1142,6 +1136,14 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 
 ## Changelog
 
+### v1.5.2 (Março 2026)
+
+#### Correções
+- **Feature Engineering**: Corrigido `_calculate_monthly_bins()` — bins agora usam `-np.inf`/`+np.inf` nas bordas para evitar NaN em dados de teste com valores fora do intervalo de treino
+- **Feature Engineering**: Adicionado `include_groups=False` em chamadas `groupby.apply()` do `AdvancedFeatureEngineer.fit()` para suprimir FutureWarning do pandas
+- **requirements.txt (SCC)**: Fixado `altair>=5.0.0,<6.0.0` (Altair 6 conflita com Streamlit no SCC), relaxado versões de `plotly`, `mlflow`, `streamlit` e `watchdog` para compatibilidade
+- **Documentação**: DOCUMENTATION.md e QUICK_REFERENCE.md atualizados com contagem de features correta (67), formato de retorno atualizado do `predict_with_package()`, e CLI do `train_pipeline.py` corrigido
+
 ### v1.5.1 (Março 2026)
 
 #### Docker & Dashboard
@@ -1153,7 +1155,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ### v1.5.0 (Março 2026)
 
 #### Qualidade & Testes
-- **190 testes passando** (cobertura 74%, threshold 70%)
+- **190 testes passando** (cobertura 70%+, threshold 70%)
 - Novos testes: `test_utils.py` (38), `test_feature_engineering.py` (25), `test_notebook_utils.py` (24)
 - Coverage mínimo atualizado de 40% para 70% (pyproject.toml + CI)
 
@@ -1194,7 +1196,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - 7 bugs críticos corrigidos (SMOTE leakage, ModelConfig, test-set snooping, etc.)
 
 #### Testes
-- **190 testes passando** (cobertura 74%)
+- **190 testes passando** (cobertura 70%+)
 - Novos testes de integração (`test_integration.py`)
 - Novos testes: `test_utils.py`, `test_feature_engineering.py`, `test_notebook_utils.py`
 
@@ -1231,7 +1233,7 @@ Veja a seção de Changelog abaixo para detalhes completos.
 - **Testes**: 82→101 passando (v1.2.1)
 
 ### v1.1.0
-- AdvancedFeatureEngineer com 63 features
+- AdvancedFeatureEngineer com 67 features
 - Ensemble XGBoost + LightGBM
 - SMOTETomek para balanceamento
 - Threshold optimization
