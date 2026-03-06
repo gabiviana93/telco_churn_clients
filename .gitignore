@@ -232,9 +232,10 @@ src/data/*
 src/data/raw/*
 !src/data/raw/*.csv
 
-# Model artifacts (keep default model for Streamlit Community Cloud)
+# Model artifacts — tracked in git for dashboard model comparison
+# and Streamlit Community Cloud deployment
 models/*
-!models/model.joblib
+!models/*.joblib
 
 # CatBoost training cache
 catboost_info/
