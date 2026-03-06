@@ -1,3 +1,12 @@
+"""Pipeline de monitoramento de drift.
+
+Detecta drift entre dados de referência e dados atuais,
+gerando relatório em reports/drift.json.
+
+Uso:
+    poetry run python scripts/monitoring_pipeline.py
+"""
+
 import json
 
 import pandas as pd

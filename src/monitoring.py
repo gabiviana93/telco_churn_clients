@@ -97,6 +97,9 @@ def population_stability_index(
         - 0.20 <= PSI < 0.25: Mudança moderada, investigação recomendada (MODERATE)
         - PSI >= 0.25: Mudança significativa, ação necessária (HIGH)
     """
+    if len(expected) == 0 or len(actual) == 0:
+        return 0.0
+
     # Criar bins a partir da distribuição de referência
     _, bin_edges = np.histogram(expected, bins=bins)
 
@@ -145,14 +148,14 @@ def detect_drift(
     """
     Detecta drift de dados entre datasets de referência e atual.
 
-    Usa PSI para features numéricas e teste qui-quadrado para categóricas.
-    Também realiza teste KS para validação adicional.
+    Usa PSI (Population Stability Index) para todas as features
+    e teste KS (Kolmogorov-Smirnov) para validação adicional.
 
     Args:
         reference_df: Dataset de referência/treinamento
         current_df: Dataset atual/produção
         features: Lista de features a verificar
-        categorical_features: Lista de features categóricas (para teste qui-quadrado)
+        categorical_features: Reservado para uso futuro (não utilizado atualmente)
 
     Returns:
         DriftReport com resultados detalhados

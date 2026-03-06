@@ -1,18 +1,27 @@
 # ⚡ Quick Reference - Adaptação Rápida
 
-Guia de referência rápida para adaptar o framework. Para detalhes completos, veja [TUTORIAL_NOVO_PROJETO.md](TUTORIAL_NOVO_PROJETO.md).
+Guia de referência rápida para adaptar o framework. Para detalhes completos, veja [DOCUMENTATION.md](DOCUMENTATION.md).
 
-## 📝 Checklist de 10 Minutos
+## Checklist de 10 Minutos
 
 ### 1. Configuração Base (2 min)
 
-```python
-# src/config.py
+As configurações são centralizadas no arquivo YAML:
 
-PROJECT_NAME = "seu_projeto"
-TARGET = "sua_coluna_target"
-MLFLOW_EXPERIMENT = "seu_experimento"
-MODEL_NAME = "seu_modelo"
+```yaml
+# config/project.yaml
+
+project:
+  name: "seu_projeto"
+  version: "1.0.0"
+
+data:
+  target_column: "sua_coluna_target"
+  id_column: "seu_id"
+  filename: "seus_dados.csv"
+
+mlflow:
+  experiment_name: "seu_experimento"
 ```
 
 ### 2. Identifique Features (3 min)
@@ -33,19 +42,24 @@ numeric.remove('target') if 'target' in numeric else None
 ### 3. Adapte Pipeline (3 min)
 
 ```python
-# scripts/run_pipeline.py
+# scripts/train_pipeline.py
 
-# Apenas mude estas linhas:
-df = pd.read_csv("SEUS_DADOS.csv")
-numeric_features = ['feat1', 'feat2', ...]  # ← Suas features numéricas
-categorical_features = ['cat1', 'cat2', ...]  # ← Suas categóricas
+# O pipeline carrega dados automaticamente do YAML.
+# Para customizar, edite config/project.yaml:
+features:
+  numeric:
+    - feat1
+    - feat2
+  categorical:
+    - cat1
+    - cat2
 ```
 
 ### 4. Execute (2 min)
 
 ```bash
 # Teste
-poetry run python scripts/test_pipeline.py
+poetry run pytest tests/ -q
 
 # Produção
 poetry run python scripts/run_pipeline.py
@@ -56,28 +70,28 @@ mlflow ui
 
 ---
 
-## 🎯 Casos de Uso Rápidos
+## Casos de Uso Rápidos
 
 ### Classificação Binária (Padrão)
 
 ```python
 # Já está pronto! Só mude:
-# - config.py (TARGET, features)
-# - Carregue seus dados
+# - config/project.yaml (target_column, features)
+# - Coloque seus dados em src/data/raw/
 ```
 
 ### Regressão
 
-```python
-# 1. config.py
-from xgboost import XGBRegressor
-
-MODEL_PARAMS = {
-    # ... params
-    "eval_metric": "rmse"
-}
+```yaml
+# 1. config/project.yaml - mude o modelo e métricas
+model:
+  model_type: "xgboost"
+  eval_metric: "rmse"
 
 # 2. src/evaluate.py - substitua função evaluate()
+```
+
+```python
 from sklearn.metrics import mean_squared_error, r2_score
 
 def evaluate(model, X_test, y_test):
@@ -91,34 +105,33 @@ def evaluate(model, X_test, y_test):
 
 ### Multiclasse
 
-```python
-# config.py
-MODEL_PARAMS = {
-    # ... outros
-    "objective": "multi:softprob",
-    "num_class": 5,  # ← Número de classes
-    "eval_metric": "mlogloss"
-}
+```yaml
+# config/project.yaml
+model:
+  model_type: "xgboost"
+  objective: "multi:softprob"
+  num_class: 5   # ← Número de classes
+  eval_metric: "mlogloss"
 ```
 
 ---
 
-## 🔍 Comandos Essenciais
+## Comandos Essenciais
 
 ```bash
 # Setup inicial
 poetry install
 poetry shell
 
-# Testes (190 testes, 74% coverage)
-./test_ci_locally.sh                    # CI completo
+# Testes (190 testes, 70%+ coverage)
+bash scripts/test_ci_locally.sh            # CI completo
 poetry run pytest tests/ -v             # Todos os testes
 poetry run pytest --cov=src --cov=api   # Com cobertura
 
 # Pipeline
 poetry run python generate_data.py      # Gerar dados (exemplo)
 poetry run python scripts/run_pipeline.py  # Rodar pipeline
-poetry run python scripts/test_pipeline.py # Testar end-to-end
+poetry run pytest tests/ -q              # Testar end-to-end
 
 # MLflow
 mlflow ui --port 5000                   # Dashboard MLflow
@@ -139,20 +152,22 @@ poetry run streamlit run scripts/dashboard.py  # Monitoramento
 
 ---
 
-## 📊 Estrutura de Arquivos Importantes
+## Estrutura de Arquivos Importantes
 
 ```
-src/config.py           ← Mude TUDO aqui primeiro
-scripts/run_pipeline.py ← Adapte loading de dados + features
+config/project.yaml        ← Mude TUDO aqui primeiro (features, modelo, paths)
+src/config.py              ← Paths e constantes carregados do YAML
+scripts/train_pipeline.py  ← Pipeline de treinamento principal
+scripts/run_pipeline.py    ← Pipeline de treino + salva métricas em JSON
 src/feature_engineering.py ← Customize feature engineering
-src/evaluate.py         ← Mude métricas (regressão/multiclasse)
-src/utils.py            ← Normalização de chaves de métricas
-tests/conftest.py       ← Adapte fixtures com seus dados
+src/evaluate.py            ← Mude métricas (regressão/multiclasse)
+src/utils.py               ← Normalização de chaves de métricas
+tests/conftest.py          ← Adapte fixtures com seus dados
 ```
 
 ---
 
-## 🚨 Erros Comuns
+## Erros Comuns
 
 ### "Feature X not found"
 → Verifique nomes de colunas em `numeric_features` e `categorical_features`
@@ -168,26 +183,33 @@ tests/conftest.py       ← Adapte fixtures com seus dados
 
 ---
 
-## 🎨 Customizações Rápidas
+## Customizações Rápidas
 
 ### Mudar Algoritmo
 
 ```python
-# src/train.py
+# config/project.yaml — mude o model_type:
+model:
+  model_type: "xgboost"  # ou "lightgbm", "catboost"
+  n_estimators: 300
+  max_depth: 6
+  learning_rate: 0.05
+```
 
-# De:
-from xgboost import XGBClassifier
-model = XGBClassifier(**params)
+Ou via código:
 
-# Para:
-from sklearn.ensemble import RandomForestClassifier
-model = RandomForestClassifier(**params)
+```python
+# scripts/train_pipeline.py
+from src.config import ModelConfig
+from src.enums import ModelType
+
+config = ModelConfig(model_type=ModelType.XGBOOST)
 ```
 
 ### Adicionar Transformação
 
 ```python
-# src/features.py - no build_preprocessor()
+# src/preprocessing.py - no build_preprocessor()
 
 from sklearn.preprocessing import PolynomialFeatures
 
@@ -201,18 +223,18 @@ numeric_transformer = Pipeline([
 
 ### Dados Desbalanceados
 
-```python
-# config.py
+```yaml
+# config/project.yaml
 
-MODEL_PARAMS = {
-    # ... outros
-    "scale_pos_weight": 5,  # ← Ajuste o peso da classe positiva
-}
+model:
+  scale_pos_weight: 5  # ← Ajuste o peso da classe positiva
 ```
+
+Ou use SMOTE via `imbalanced-learn` (já incluído como dependência).
 
 ---
 
-## 📦 Dependências Extras
+## Dependências Extras
 
 ```bash
 # Para bases SQL
@@ -230,11 +252,11 @@ poetry add pandera
 
 ---
 
-## ✅ Validação Antes do Push
+## Validação Antes do Push
 
 ```bash
 # 1. Testes
-./test_ci_locally.sh
+bash scripts/test_ci_locally.sh
 
 # 2. Cobertura (mínimo 70%)
 poetry run pytest --cov=src --cov=api --cov-report=term
@@ -250,13 +272,11 @@ git push
 
 ---
 
-## 📚 Mais Informações
+## Mais Informações
 
 - Tutorial completo: [DOCUMENTATION.md](DOCUMENTATION.md)
 - README principal: [README.md](README.md)
 
 ---
 
-**⏱️ Tempo estimado de adaptação: 15-30 minutos**
-
-**🎯 Objetivo: Framework pronto para seu projeto em menos de 1 hora!**
+**Tempo estimado de adaptação: 15-30 minutos**

@@ -266,12 +266,7 @@ class ModelService:
             Tupla de (predições, probabilidades)
         """
         if not self.is_loaded:
-            # Modo demo: retorna predições aleatórias
-            logger.warning("Using demo predictions (model not loaded)")
-            n_samples = len(features)
-            predictions = np.random.randint(0, 2, size=n_samples)
-            probabilities = np.random.uniform(0.2, 0.8, size=n_samples)
-            return predictions, probabilities
+            raise RuntimeError("Model not loaded. Cannot make predictions without a trained model.")
 
         try:
             # Usa ChurnPipeline se disponível
