@@ -1,6 +1,6 @@
 # ⚡ Quick Reference - Adaptação Rápida
 
-Guia de referência rápida para adaptar o framework. Para detalhes completos, veja [TUTORIAL_NOVO_PROJETO.md](TUTORIAL_NOVO_PROJETO.md).
+Guia de referência rápida para adaptar o framework. Para detalhes completos, veja [DOCUMENTATION.md](DOCUMENTATION.md).
 
 ## 📝 Checklist de 10 Minutos
 
@@ -45,7 +45,7 @@ categorical_features = ['cat1', 'cat2', ...]  # ← Suas categóricas
 
 ```bash
 # Teste
-poetry run python scripts/test_pipeline.py
+poetry run pytest tests/ -q
 
 # Produção
 poetry run python scripts/run_pipeline.py
@@ -118,7 +118,7 @@ poetry run pytest --cov=src --cov=api   # Com cobertura
 # Pipeline
 poetry run python generate_data.py      # Gerar dados (exemplo)
 poetry run python scripts/run_pipeline.py  # Rodar pipeline
-poetry run python scripts/test_pipeline.py # Testar end-to-end
+poetry run pytest tests/ -q              # Testar end-to-end
 
 # MLflow
 mlflow ui --port 5000                   # Dashboard MLflow

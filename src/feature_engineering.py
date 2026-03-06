@@ -223,6 +223,10 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         if len(bin_edges) < 5:
             bin_edges = np.linspace(monthly_charges.min(), monthly_charges.max(), 5)
 
+        # Extend edges to -inf/+inf so unseen values in test data are binned
+        bin_edges[0] = -np.inf
+        bin_edges[-1] = np.inf
+
         return bin_edges
 
     def _fit_supervised_encodings(self, df, y):
@@ -406,14 +410,14 @@ class AdvancedFeatureEngineer(FeatureEngineer):
             if "InternetService" in df.columns:
                 self.internet_service_risk_ = (
                     df.groupby("InternetService")
-                    .apply(lambda x: y_binary.loc[x.index].mean())
+                    .apply(lambda x: y_binary.loc[x.index].mean(), include_groups=False)
                     .to_dict()
                 )
 
             if "PaymentMethod" in df.columns:
                 self.payment_method_risk_ = (
                     df.groupby("PaymentMethod")
-                    .apply(lambda x: y_binary.loc[x.index].mean())
+                    .apply(lambda x: y_binary.loc[x.index].mean(), include_groups=False)
                     .to_dict()
                 )
 

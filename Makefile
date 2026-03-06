@@ -167,7 +167,7 @@ train-quick:
 	poetry run python scripts/train_pipeline.py --quick
 
 inference:
-	poetry run python scripts/inference_pipeline.py --interactive
+	poetry run python scripts/run_pipeline.py
 
 # =============================================================================
 # Cleanup

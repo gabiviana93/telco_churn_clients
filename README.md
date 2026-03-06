@@ -24,7 +24,7 @@
 [Skills Demonstrados](#skills-demonstrados) |
 [API](#-api) |
 [Documentação](DOCUMENTATION.md) |
-[Guia de Adaptação](docs/ADAPTATION_GUIDE.md)
+[Documentação](DOCUMENTATION.md)
 
 </div>
 
@@ -170,7 +170,7 @@ poetry run python scripts/train_pipeline.py --mode ensemble --trials 200
 
 ```bash
 # Modo interativo
-poetry run python scripts/inference_pipeline.py --interactive
+poetry run python scripts/run_pipeline.py
 
 # Via API
 poetry run uvicorn api.main:app --reload

@@ -1,3 +1,12 @@
+"""Pipeline de treino e avaliação do modelo de churn.
+
+Executa o pipeline completo: carrega dados, treina modelo,
+avalia métricas e salva artefatos.
+
+Uso:
+    poetry run python scripts/run_pipeline.py
+"""
+
 import json
 
 import mlflow
@@ -37,8 +46,10 @@ def main():
         # 4. Avaliar no conjunto de teste
         metrics = pipeline.evaluate(X_test, y_test)
 
-        # Adicionar métricas de CV ao resultado
-        metrics.update(pipeline.metrics)
+        # Adicionar métricas de CV ao resultado (prefixadas para evitar colisão)
+        for key, value in pipeline.metrics.items():
+            if key not in metrics:
+                metrics[key] = value
 
         # Logar métricas no MLflow
         mlflow.log_metrics(metrics)

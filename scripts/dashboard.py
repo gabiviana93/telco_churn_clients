@@ -9,9 +9,9 @@ Dashboard interativo Streamlit para:
 - Rastreamento de experimentos MLflow
 
 Uso:
-    streamlit run app/dashboard.py
+    streamlit run scripts/dashboard.py
     # OU
-    poetry run streamlit run app/dashboard.py
+    poetry run streamlit run scripts/dashboard.py
 """
 
 # Garante que o diretório raiz do projeto esteja no sys.path

@@ -339,19 +339,24 @@ docker run -p 8501:8501 -v ./models:/app/models:ro churn-dashboard
 
 ## 7. Fazer Predições
 
-### 7.1 Via CLI (Modo Interativo)
+### 7.1 Via Pipeline (Treino + Avaliação)
 
 ```bash
-# Iniciar modo interativo
-poetry run python scripts/inference_pipeline.py --interactive
+# Executar pipeline completo (treino + avaliação + salvar modelo)
+poetry run python scripts/run_pipeline.py
 ```
 
-### 7.2 Via CLI (Arquivo JSON)
+### 7.2 Via Python (Inferência)
 
-```bash
-# Criar arquivo de exemplo
-cat > customer.json << 'EOF'
-{
+```python
+from src.inference import load_model_package, predict_with_package
+import pandas as pd
+
+# Carregar modelo
+package = load_model_package()
+
+# Criar dados de um cliente
+customer = pd.DataFrame([{
   "gender": "Male",
   "SeniorCitizen": 0,
   "Partner": "No",
@@ -371,46 +376,30 @@ cat > customer.json << 'EOF'
   "PaymentMethod": "Electronic check",
   "MonthlyCharges": 70.0,
   "TotalCharges": 140.0
-}
-EOF
+}])
 
 # Fazer predição
-poetry run python scripts/inference_pipeline.py --customer customer.json
+result = predict_with_package(package, customer)
+print(result)
 ```
 
-### 7.3 Via CLI (Batch - CSV)
+### 7.3 Via API REST
 
 ```bash
-# Predição em lote
-poetry run python scripts/inference_pipeline.py \
-  --batch customers.csv \
-  --output predictions.csv
+# Iniciar API
+poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Fazer predição (em outro terminal)
+curl -X POST http://localhost:8000/predict/ \
+  -H "Content-Type: application/json" \
+  -d '{"gender": "Male", "SeniorCitizen": 0, "Partner": "No", "Dependents": "No", "tenure": 2, "PhoneService": "Yes", "MultipleLines": "No", "InternetService": "Fiber optic", "OnlineSecurity": "No", "OnlineBackup": "No", "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No", "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes", "PaymentMethod": "Electronic check", "MonthlyCharges": 70.0, "TotalCharges": 140.0}'
 ```
 
-### 7.4 Via Python
+### 7.4 Via Dashboard
 
-```python
-from src.inference import load_model_package, predict_with_package
-
-# Inicializar
-package = load_model_package()
-
-# Fazer predição
-result = predict_with_package(
-    package,
-    {
-        "gender": "Female",
-        "SeniorCitizen": 0,
-        "Partner": "Yes",
-        "tenure": 24,
-        "Contract": "One year",
-        # ... outras features
-    }
-)
-
-print(f"Predição: {result['prediction']}")
-print(f"Probabilidade: {result['probability']:.2%}")
-print(f"Risco: {result['risk_level']}")
+```bash
+poetry run streamlit run scripts/dashboard.py
+# Acesse: http://localhost:8501 → Página "Predição"
 ```
 
 ---
@@ -523,7 +512,6 @@ print('Core Modules OK')
 ## Recursos Adicionais
 
 - [DOCUMENTATION.md](DOCUMENTATION.md) - Documentação técnica completa
-- [CHANGELOG.md](CHANGELOG.md) - Histórico de alterações
 - [README.md](README.md) - Visão geral do projeto
 - [API Swagger](http://localhost:8000/docs) - Documentação interativa da API
 

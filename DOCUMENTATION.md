@@ -86,12 +86,6 @@ churn_clientes/
 │   ├── schemas/                  # Modelos Pydantic (gerados dinamicamente do YAML)
 │   └── services/                 # ModelService singleton
 │
-├── scripts/                      # Scripts executáveis
-│   ├── dashboard.py              # Dashboard Streamlit interativo
-│   ├── train_pipeline.py         # Pipeline de treinamento (quick/optimized/ensemble)
-│   ├── run_pipeline.py           # Pipeline de inferência
-│   └── monitoring_pipeline.py    # Pipeline de monitoramento
-│
 ├── notebooks/                    # Jupyter notebooks
 │   ├── 01_eda.ipynb              # Análise exploratória
 │   ├── 02_preprocess_feature_engineering.ipynb
@@ -1204,7 +1198,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - Novos testes de integração (`test_integration.py`)
 - Novos testes: `test_utils.py`, `test_feature_engineering.py`, `test_notebook_utils.py`
 
-Veja [CHANGELOG.md](CHANGELOG.md) para detalhes completos.
+Veja a seção de Changelog abaixo para detalhes completos.
 
 ### v1.2.0 (Março 2026)
 
@@ -1254,7 +1248,7 @@ Veja [CHANGELOG.md](CHANGELOG.md) para detalhes completos.
 
 - [QUICKSTART.md](QUICKSTART.md) - Guia de início rápido e testes
 - [README.md](README.md) - Visão geral do projeto
-- [Guia de Adaptação](docs/ADAPTATION_GUIDE.md) - Como adaptar para outro problema de classificação
+- [QUICKSTART.md](QUICKSTART.md) - Guia de início rápido e testes
 - [XGBoost Documentation](https://xgboost.readthedocs.io/)
 - [Optuna Documentation](https://optuna.org/)
 - [SHAP Documentation](https://shap.readthedocs.io/)

@@ -279,7 +279,9 @@ def panel_categoric_features(dataset, target_col=TARGET, id_col=ID_COL):
         ax.spines["right"].set_visible(False)
         ax.tick_params(axis="x", rotation=40)
 
-    for i in range(idx + 1, len(axes)):
+    # Remove eixos não utilizados
+    last_idx = len(cols_plot) - 1
+    for i in range(last_idx + 1, len(axes)):
         fig.delaxes(axes[i])
 
     plt.tight_layout()

@@ -34,6 +34,7 @@ pydantic = "^2.9"
 pydantic-settings = "^2.6"
 python-multipart = "^0.0.9"
 structlog = "^24.4"
+requests = "^2.31"
 # Utilities
 scipy = "^1.11"
 matplotlib = "^3.8"
