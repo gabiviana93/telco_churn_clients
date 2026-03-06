@@ -39,8 +39,10 @@ help:
 	@echo "  make mlflow     - Start MLflow UI"
 	@echo ""
 	@echo "Training:"
-	@echo "  make train        - Run training pipeline"
-	@echo "  make run-pipeline - Train, evaluate, log to MLflow, and save model"
+	@echo "  make train           - Run training pipeline (padrões do YAML)"
+	@echo "  make train-optimized - Otimização multi-modelo (LightGBM, XGBoost, CatBoost)"
+	@echo "  make train-quick     - Otimização rápida (10 trials, 3-fold CV)"
+	@echo "  make run-pipeline    - Train, evaluate, log to MLflow, and save model"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean      - Remove cache and temporary files"
@@ -162,10 +164,10 @@ train:
 	poetry run python scripts/train_pipeline.py
 
 train-optimized:
-	poetry run python scripts/train_pipeline.py
+	poetry run python scripts/optimize_model.py
 
 train-quick:
-	poetry run python scripts/train_pipeline.py
+	poetry run python scripts/optimize_model.py --quick
 
 run-pipeline:
 	poetry run python scripts/run_pipeline.py

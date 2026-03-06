@@ -131,6 +131,8 @@ poetry run pytest --cov=src --cov=api   # Com cobertura
 # Pipeline
 poetry run python generate_data.py      # Gerar dados (exemplo)
 poetry run python scripts/run_pipeline.py  # Rodar pipeline
+poetry run python scripts/optimize_model.py --quick  # Otimização rápida
+poetry run python scripts/optimize_model.py  # Otimização completa
 poetry run pytest tests/ -q              # Testar end-to-end
 
 # MLflow
@@ -157,8 +159,9 @@ poetry run streamlit run scripts/dashboard.py  # Monitoramento
 ```
 config/project.yaml        ← Mude TUDO aqui primeiro (features, modelo, paths)
 src/config.py              ← Paths e constantes carregados do YAML
-scripts/train_pipeline.py  ← Pipeline de treinamento principal
+scripts/train_pipeline.py  ← Pipeline de treinamento padrão
 scripts/run_pipeline.py    ← Pipeline de treino + salva métricas em JSON
+scripts/optimize_model.py  ← Otimização multi-modelo (LightGBM, XGBoost, CatBoost)
 src/feature_engineering.py ← Customize feature engineering
 src/evaluate.py            ← Mude métricas (regressão/multiclasse)
 src/utils.py               ← Normalização de chaves de métricas

@@ -28,14 +28,17 @@
 ### Objetivo
 Sistema de predição de churn (cancelamento) de clientes para empresas de telecomunicações, utilizando machine learning para identificar clientes com alto risco de cancelamento.
 
-### Métricas Alcançadas
-- **F1-Score**: 57.4%
-- **AUC-ROC**: 83.3%
-- **AUPRC**: 79.1%
-- **Accuracy**: 79.7%
-- **Precision**: 64.8%
-- **Recall**: 51.6%
+### Métricas Alcançadas (CatBoost — Otimizado)
+- **F1-Score**: 63.5%
+- **AUC-ROC**: 84.2%
+- **AUPRC**: 65.4%
+- **Accuracy**: 76.9%
+- **Precision**: 54.6%
+- **Recall**: 75.7%
+- **Threshold otimizado**: 0.41
 - **Testes**: 190 passando (cobertura 70%+)
+
+> Baseline LightGBM (train_pipeline.py): F1=57.4%, AUC=83.3%.
 
 ### Stack Tecnológica
 - **Python 3.12+**
@@ -73,8 +76,9 @@ churn_clientes/
 │
 ├── scripts/                      # Scripts e Dashboard
 │   ├── dashboard.py              # Dashboard Streamlit interativo
-│   ├── train_pipeline.py         # Pipeline de treinamento (quick/optimized/ensemble)
-│   ├── run_pipeline.py           # Pipeline de inferência
+│   ├── train_pipeline.py         # Pipeline de treinamento padrão
+│   ├── run_pipeline.py           # Pipeline completo (treino + avaliação + salvar)
+│   ├── optimize_model.py         # Otimização multi-modelo (LightGBM, XGBoost, CatBoost)
 │   └── monitoring_pipeline.py    # Pipeline de monitoramento
 │
 ├── api/                          # API REST (FastAPI)
@@ -275,17 +279,43 @@ poetry run python -c "from src.pipeline import ChurnPipeline; print('OK')"
 poetry run python scripts/train_pipeline.py
 ```
 
-### 2. Via Makefile
+### 2. Otimização Multi-Modelo
+
+```bash
+# Otimização completa (20 trials por modelo, 5-fold CV, SMOTE)
+poetry run python scripts/optimize_model.py
+
+# Otimização rápida (10 trials, 3-fold CV)
+poetry run python scripts/optimize_model.py --quick
+
+# Mais trials para resultado mais refinado
+poetry run python scripts/optimize_model.py --trials 50
+
+# Modelos específicos
+poetry run python scripts/optimize_model.py --models lgb xgb
+```
+
+O script compara LightGBM, XGBoost e CatBoost, salva cada modelo
+individualmente (`model_lightgbm.joblib`, etc.) e copia o melhor
+como `model.joblib` (padrão da API e dashboard).
+
+### 3. Via Makefile
 
 ```bash
 # Treinamento padrão
 make train
 
+# Otimização multi-modelo
+make train-optimized
+
+# Otimização rápida
+make train-quick
+
 # Ou via Docker
 docker compose up api  # O modelo é carregado do diretório models/
 ```
 
-### 3. Apenas Feature Engineering
+### 4. Apenas Feature Engineering
 
 ```python
 from src.feature_engineering import AdvancedFeatureEngineer
@@ -1135,6 +1165,16 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ---
 
 ## Changelog
+
+### v1.6.0 (Julho 2025)
+
+#### Otimização Multi-Modelo
+- **optimize_model.py**: Novo script de otimização multi-modelo (LightGBM, XGBoost, CatBoost) com Optuna
+  - Flags: `--quick` (10 trials, 3-fold CV), `--trials N`, `--models lgb xgb cat`
+  - Salva cada modelo individualmente e copia o melhor como `model.joblib`
+- **CatBoost como melhor modelo**: F1=0.635, AUC=0.842, AUPRC=0.654 (threshold=0.41)
+- **Makefile atualizado**: `make train-optimized` e `make train-quick` usam `optimize_model.py`
+- **Documentação**: Todas as docs atualizadas com métricas do CatBoost e referências ao optimize_model.py
 
 ### v1.5.2 (Março 2026)
 

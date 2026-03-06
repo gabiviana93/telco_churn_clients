@@ -23,7 +23,6 @@
 [Arquitetura](#arquitetura) |
 [Skills Demonstrados](#skills-demonstrados) |
 [API](#-api) |
-[Documentação](DOCUMENTATION.md) |
 [Documentação](DOCUMENTATION.md)
 
 </div>
@@ -43,28 +42,30 @@ EDA → Feature Engineering → Modelagem → Otimização → Deploy → Monito
 | Métrica de Negócio | Valor |
 |-------------------|-------|
 | **Base Real** | 7.043 clientes, churn rate 26,5% |
-| **Clientes em Risco Identificados** | 52% dos churners (recall) |
-| **Precisão na Identificação** | 65% (precision) |
-| **Receita em Risco Detectada** | ~R$ 40k/mês* |
+| **Clientes em Risco Identificados** | 76% dos churners (recall) |
+| **Precisão na Identificação** | 55% (precision) |
+| **Receita em Risco Detectada** | ~R$ 58k/mês* |
 
-*Calculado sobre os verdadeiros positivos do modelo (ticket médio R$64,76/mês × ~625 clientes corretamente identificados)
+*Calculado sobre os verdadeiros positivos do modelo (ticket médio R$64,76/mês × ~900 clientes corretamente identificados)
 
-### Métricas do Modelo (LightGBM)
+### Métricas do Modelo (CatBoost — Otimizado)
 
 | Métrica | Valor | Significado |
 |---------|:-----:|-------------|
-| **F1-Score** | **0.574** | Equilíbrio entre precisão e recall |
-| **ROC-AUC** | 0.833 | Excelente capacidade discriminativa |
-| **AUPRC** | 0.791 | Área sob a curva Precision-Recall |
-| **Accuracy** | 0.797 | Acurácia geral do modelo |
-| **Precision** | 0.648 | Dos preditos como churn, quantos realmente são |
-| **Recall** | 0.516 | Dos churns reais, quantos foram identificados |
+| **F1-Score** | **0.635** | Equilíbrio entre precisão e recall |
+| **ROC-AUC** | 0.842 | Excelente capacidade discriminativa |
+| **AUPRC** | 0.654 | Área sob a curva Precision-Recall |
+| **Accuracy** | 0.769 | Acurácia geral do modelo |
+| **Precision** | 0.546 | Dos preditos como churn, quantos realmente são |
+| **Recall** | 0.757 | Dos churns reais, quantos foram identificados |
+
+> Modelo otimizado via `scripts/optimize_model.py` com threshold=0.41. Baseline LightGBM: F1=0.574, AUC=0.833.
 
 ### Diferenciais Técnicos
 
 | Feature | Descrição |
 |---------|-----------|
-| **44 Features Engenheiradas** | A partir de 19 features originais (63 total) |
+| **48 Features Engenheiradas** | A partir de 19 features originais (67 total) |
 | **Multi-modelo (LightGBM, CatBoost, XGBoost)** | Comparação e seleção do melhor modelo |
 | **SMOTETomek** | Tratamento de desbalanceamento |
 | **Threshold Optimization** | Otimização via Optuna para F1 máximo |
@@ -156,20 +157,14 @@ docker compose --profile dev up api-dev
 ### Treinar o Modelo
 
 ```bash
-# Treino rápido com parâmetros default
-poetry run python scripts/train_pipeline.py --quick
-
-# Treino com otimização Optuna (recomendado)
-poetry run python scripts/train_pipeline.py --mode optimized --trials 100
-
-# Treino com ensemble XGBoost + LightGBM
-poetry run python scripts/train_pipeline.py --mode ensemble --trials 200
+# Treino com LightGBM (parâmetros do config/project.yaml)
+poetry run python scripts/train_pipeline.py
 ```
 
 ### Fazer Predições
 
 ```bash
-# Modo interativo
+# Pipeline completo (treino + avaliação + salvar modelo e métricas)
 poetry run python scripts/run_pipeline.py
 
 # Via API
@@ -242,8 +237,9 @@ churn_clientes/
 │
 ├── scripts/                      # Scripts de produção
 │   ├── dashboard.py              # Dashboard Streamlit interativo
-│   ├── train_pipeline.py         # Pipeline de treino (quick/optimized/ensemble)
-│   ├── run_pipeline.py           # Pipeline de inferência
+│   ├── train_pipeline.py         # Pipeline de treino com MLflow
+│   ├── run_pipeline.py           # Pipeline completo (treino + avaliação + salvar)
+│   ├── optimize_model.py         # Otimização multi-modelo (LightGBM, XGBoost, CatBoost)
 │   └── monitoring_pipeline.py    # Pipeline de monitoramento
 │
 ├── notebooks/                    # Análise e experimentos
@@ -277,7 +273,7 @@ O projeto usa as **mesmas classes** em todos os componentes:
 | Componente | Classes Utilizadas |
 |------------|-------------------|
 | Notebooks | `ChurnPipeline`, `HyperparameterOptimizer` |
-| Scripts CLI | `ChurnPipeline`, `evaluate()` |
+| Scripts | `ChurnPipeline`, `evaluate()` |
 | API REST | `ModelService` (usa `load_model_package`) |
 | Dashboard | `load_model()`, `predict_via_api()`, `_load_metrics_from_report()` |
 
@@ -481,12 +477,14 @@ model_config = ModelConfig(
 ### 3. Comandos Make
 
 ```bash
-make help       # Ver todos os comandos
-make dev        # Instalar dependências
-make test       # Rodar testes
-make api        # Iniciar API
-make dashboard  # Iniciar dashboard (scripts/dashboard.py)
-make train      # Treinar modelo
+make help            # Ver todos os comandos
+make dev             # Instalar dependências
+make test            # Rodar testes
+make api             # Iniciar API
+make dashboard       # Iniciar dashboard (scripts/dashboard.py)
+make train           # Treinar modelo (parâmetros do YAML)
+make train-optimized # Otimização multi-modelo (LightGBM, XGBoost, CatBoost)
+make train-quick     # Otimização rápida (10 trials, 3-fold CV)
 ```
 
 ---
