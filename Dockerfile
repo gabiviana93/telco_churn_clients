@@ -88,6 +88,10 @@ FROM production AS dashboard
 ENV PORT=8501
 EXPOSE 8501
 
+# Override healthcheck to check Streamlit's health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
 # Run Streamlit dashboard
 CMD ["python", "-m", "streamlit", "run", "scripts/dashboard.py", \
     "--server.port=8501", "--server.address=0.0.0.0", \
