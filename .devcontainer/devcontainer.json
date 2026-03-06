@@ -19,6 +19,9 @@
   },
   "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
   "postAttachCommand": {
+    // CORS and XSRF protection are disabled here because the devcontainer is expected
+    // to run behind the Codespaces/Streamlit reverse proxy, which provides its own
+    // protections. Do not copy this setting to production without reviewing security.
     "server": "streamlit run scripts/dashboard.py --server.enableCORS false --server.enableXsrfProtection false"
   },
   "portsAttributes": {
