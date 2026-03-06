@@ -97,6 +97,9 @@ def population_stability_index(
         - 0.20 <= PSI < 0.25: Mudança moderada, investigação recomendada (MODERATE)
         - PSI >= 0.25: Mudança significativa, ação necessária (HIGH)
     """
+    if len(expected) == 0 or len(actual) == 0:
+        return 0.0
+
     # Criar bins a partir da distribuição de referência
     _, bin_edges = np.histogram(expected, bins=bins)
 
@@ -104,8 +107,6 @@ def population_stability_index(
     actual_perc, _ = np.histogram(actual, bins=bin_edges)
 
     # Normalizar para porcentagens (proteger contra divisão por zero)
-    if len(expected) == 0 or len(actual) == 0:
-        return 0.0
     expected_perc = expected_perc / len(expected)
     actual_perc = actual_perc / len(actual)
 
