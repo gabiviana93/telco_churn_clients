@@ -172,14 +172,8 @@ def load_model_by_path(model_path: Path):
 
 def load_model():
     """Carrega o modelo ativo (selecionado no sidebar ou default)."""
-    if "selected_model_path" in st.session_state:
-        return load_model_by_path(st.session_state.selected_model_path)
-
-    try:
-        package = load_model_package(MODEL_PATH)
-        return package
-    except FileNotFoundError:
-        return None
+    model_path = st.session_state.get("selected_model_path", Path(MODEL_PATH))
+    return load_model_by_path(model_path)
 
 
 @st.cache_data(ttl=60)
@@ -475,20 +469,23 @@ def render_sidebar():
         st.sidebar.warning("⚠️ API Offline - Usando modelo local")
 
     # Status do Modelo
-    package = load_model()
-    if package is not None:
+    if api_online:
         model_label = st.session_state.get("selected_model_name", Path(MODEL_PATH).stem)
-        st.sidebar.success(f"✅ Modelo: {model_label}")
-        # Mostra métricas se disponível
-        if isinstance(package, dict) and "metadata" in package:
-            metadata = package.get("metadata", {})
-            metrics = normalize_metrics_keys(metadata.get("metrics", {}))
-            if metrics:
-                f1 = metrics.get("f1_score", 0)
-                auc = metrics.get("roc_auc", 0)
-                st.sidebar.caption(f"F1: {f1:.2%} | AUC: {auc:.2%}")
+        st.sidebar.success(f"✅ Modelo (API): {model_label}")
     else:
-        st.sidebar.error("❌ Modelo não encontrado")
+        package = load_model()
+        if package is not None:
+            model_label = st.session_state.get("selected_model_name", Path(MODEL_PATH).stem)
+            st.sidebar.success(f"✅ Modelo: {model_label}")
+            if isinstance(package, dict) and "metadata" in package:
+                metadata = package.get("metadata", {})
+                metrics = normalize_metrics_keys(metadata.get("metrics", {}))
+                if metrics:
+                    f1 = metrics.get("f1_score", 0)
+                    auc = metrics.get("roc_auc", 0)
+                    st.sidebar.caption(f"F1: {f1:.2%} | AUC: {auc:.2%}")
+        else:
+            st.sidebar.error("❌ Modelo não encontrado")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ℹ️ Sobre")

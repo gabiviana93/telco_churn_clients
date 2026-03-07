@@ -775,17 +775,18 @@ class TestLoadModel:
 
     def test_uses_default_path_when_no_selection(self, dashboard, _patch_streamlit):
         mock_package = {"model": MagicMock()}
-        _patch_streamlit.session_state = {}
+        _patch_streamlit.session_state = _AttrDict()
 
-        with patch.object(dashboard, "load_model_package", return_value=mock_package):
+        with patch.object(dashboard, "load_model_by_path", return_value=mock_package) as mock_load:
             result = dashboard.load_model()
 
+        mock_load.assert_called_once_with(Path(dashboard.MODEL_PATH))
         assert result == mock_package
 
     def test_returns_none_on_file_not_found(self, dashboard, _patch_streamlit):
-        _patch_streamlit.session_state = {}
+        _patch_streamlit.session_state = _AttrDict()
 
-        with patch.object(dashboard, "load_model_package", side_effect=FileNotFoundError):
+        with patch.object(dashboard, "load_model_by_path", return_value=None):
             result = dashboard.load_model()
 
         assert result is None
