@@ -1845,20 +1845,42 @@ def render_model_comparison():
     st.markdown("---")
     st.markdown("### 🏆 Recomendação")
 
+    ranking_metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall"]
     df_ranked = df.dropna(subset=["F1-Score"])
     if len(df_ranked) > 0:
-        best_model = df_ranked.loc[df_ranked["F1-Score"].idxmax()]
+        # Ranking composto: conta vitórias em cada métrica
+        wins = pd.Series(0, index=df_ranked.index)
+        for m in ranking_metrics:
+            col_vals = df_ranked[m].dropna()
+            if len(col_vals) > 0:
+                wins[col_vals.idxmax()] = wins.get(col_vals.idxmax(), 0) + 1
 
-        col1, col2, col3 = st.columns(3)
+        # Desempate por F1-Score
+        best_idx = wins.sort_values(ascending=False).index[0]
+        if wins.max() == wins.iloc[0] and len(wins[wins == wins.max()]) > 1:
+            tied = wins[wins == wins.max()].index
+            best_idx = df_ranked.loc[tied, "F1-Score"].idxmax()
 
+        best_model = df_ranked.loc[best_idx]
+
+        st.success(
+            f"**Melhor Modelo:** {best_model['Nome']} "
+            f"(vence em {int(wins[best_idx])}/{len(ranking_metrics)} métricas)"
+        )
+
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.success(f"**Melhor Modelo (F1):** {best_model['Nome']}")
-        with col2:
             if pd.notna(best_model.get("F1-Score")):
                 st.metric("F1-Score", f"{best_model['F1-Score']:.2%}")
-        with col3:
+        with col2:
             if pd.notna(best_model.get("AUC-ROC")):
                 st.metric("AUC-ROC", f"{best_model['AUC-ROC']:.2%}")
+        with col3:
+            if pd.notna(best_model.get("AUPRC")):
+                st.metric("AUPRC", f"{best_model['AUPRC']:.2%}")
+        with col4:
+            if pd.notna(best_model.get("Recall")):
+                st.metric("Recall", f"{best_model['Recall']:.2%}")
 
         # Botão para selecionar melhor modelo
         if st.button("🎯 Usar este modelo"):
