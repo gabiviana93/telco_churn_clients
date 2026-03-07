@@ -36,7 +36,7 @@ Sistema de predição de churn (cancelamento) de clientes para empresas de telec
 - **Precision**: 54.6%
 - **Recall**: 75.7%
 - **Threshold otimizado**: 0.41
-- **Testes**: 256 passando (cobertura 70%+)
+- **Testes**: 264 passando (cobertura 70%+)
 
 > Baseline LightGBM (train_pipeline.py): F1=57.4%, AUC=83.3%.
 
@@ -1226,6 +1226,19 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 
 ## Changelog
 
+### v1.8.2 (Março 2026)
+
+#### Dashboard — Comparação de Modelos
+- **Ranking multi-métrica**: Recomendação do melhor modelo agora usa contagem de vitórias em F1-Score, AUC-ROC, AUPRC e Recall (antes usava apenas F1). Desempate por F1-Score.
+- **`_rank_best_model()` extraído**: Lógica de ranking extraída para helper puro testável, sem dependência de Streamlit.
+- **Heatmap de comparação**: Gráfico de barras substituído por heatmap anotado (escala RdYlGn) — modelos × métricas, com eixo de cor ajustado para evidenciar diferenças.
+- **Accuracy na Home**: Adicionada métrica Accuracy na página inicial (era a única métrica ausente).
+- **Fallback metrics.json**: Comparação de modelos agora preenche métricas ausentes no `.joblib` com dados de `reports/metrics.json` via `setdefault` — resolve Accuracy faltando em `churn_model_catboost.joblib`.
+
+#### Testes
+- **264 testes passando** (era 256)
+- 8 novos testes em `TestRankBestModel`: vencedor claro, empate 2×2 com desempate F1, empate triplo, métricas NaN, coluna ausente, modelo único, métricas customizadas
+
 ### v1.8.1 (Março 2026)
 
 #### Correções e Consistência
@@ -1238,9 +1251,9 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - **Dashboard stale model cache**: Removido `@st.cache_resource` de `load_model()` que causava retorno do modelo da primeira chamada ignorando seleção posterior. Simplificados 3 call sites que duplicavam lógica de seleção de modelo.
 
 #### Testes
-- **256 testes passando** (era 196)
+- **264 testes passando** (era 196)
 - Novos testes em `test_api.py`: `TestModelsManagementEndpoints` (6 testes cobrindo `GET /models/` e `POST /models/switch`)
-- Novo `test_dashboard.py`: 60 testes cobrindo funções utilitárias, predição local, métricas por modelo, helpers de severity/drift, API wrappers e routing de `load_model()`
+- Novo `test_dashboard.py`: 68 testes cobrindo funções utilitárias, predição local, métricas por modelo, helpers de severity/drift, API wrappers, routing de `load_model()` e ranking multi-métrica
 
 ### v1.8.0 (Março 2026)
 
@@ -1291,7 +1304,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ### v1.5.0 (Março 2026)
 
 #### Qualidade & Testes
-- **256 testes passando** (cobertura 70%+, threshold 70%)
+- **264 testes passando** (cobertura 70%+, threshold 70%)
 - Novos testes: `test_utils.py` (38), `test_feature_engineering.py` (25), `test_notebook_utils.py` (24)
 - Coverage mínimo atualizado de 40% para 70% (pyproject.toml + CI)
 
@@ -1332,7 +1345,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - 7 bugs críticos corrigidos (SMOTE leakage, ModelConfig, test-set snooping, etc.)
 
 #### Testes
-- **256 testes passando** (cobertura 70%+)
+- **264 testes passando** (cobertura 70%+)
 - Novos testes de integração (`test_integration.py`)
 - Novos testes: `test_utils.py`, `test_feature_engineering.py`, `test_notebook_utils.py`
 
@@ -1356,7 +1369,7 @@ Veja a seção de Changelog abaixo para detalhes completos.
 - **requirements.txt sincronizado**: Adicionados optuna, imbalanced-learn, catboost, matplotlib, seaborn, shap
 
 #### Testes
-- **82→256 testes passando**
+- **82→264 testes passando**
 - Novos testes para `optimization.py` (16 testes)
 
 ### v1.2.1 (Março 2026)

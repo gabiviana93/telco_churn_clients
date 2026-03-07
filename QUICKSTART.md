@@ -76,14 +76,14 @@ print('Todas as dependências estão instaladas')
 
 ## 3. Executar Testes
 
-### 3.1 Testes Completos (256 testes)
+### 3.1 Testes Completos (264 testes)
 
 ```bash
 # Executar todos os testes
 poetry run pytest tests/ -v
 
 # Saída esperada:
-# ======================= 256 passed in ~30s =======================
+# ======================= 264 passed in ~30s ==========================
 ```
 
 ### 3.2 Testes por Módulo
@@ -509,7 +509,7 @@ Execute este checklist para validar que tudo está funcionando:
 ```bash
 # 1. Testes unitários
 poetry run pytest tests/ -v
-# Esperado: 256 passed
+# Esperado: 264 passed
 
 # 2. API - Health
 curl http://localhost:8000/health 2>/dev/null | grep -q "healthy" && echo "API OK" || echo "API FAIL"
