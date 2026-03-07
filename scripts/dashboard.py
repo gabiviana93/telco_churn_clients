@@ -542,19 +542,23 @@ def _load_metrics_from_report() -> dict:
 
     metrics_json_path = REPORTS_DIR / "metrics.json"
     if metrics_json_path.exists():
-        with open(metrics_json_path) as f:
-            data = json.load(f)
+        try:
+            with open(metrics_json_path) as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            data = None
 
-        # Tenta retornar métricas específicas do modelo selecionado
-        individual = data.get("individual_results", {})
-        if individual:
-            model_stem = _get_active_model_name()
-            # Extrai algoritmo do stem (ex.: "model_xgboost" → "xgboost")
-            for algo_key in individual:
-                if algo_key in model_stem:
-                    return normalize_metrics_keys(individual[algo_key])
+        if isinstance(data, dict):
+            # Tenta retornar métricas específicas do modelo selecionado
+            individual = data.get("individual_results", {})
+            if individual:
+                model_stem = _get_active_model_name()
+                # Extrai algoritmo do stem (ex.: "model_xgboost" → "xgboost")
+                for algo_key in individual:
+                    if algo_key in model_stem:
+                        return normalize_metrics_keys(individual[algo_key])
 
-        return normalize_metrics_keys(data)
+            return normalize_metrics_keys(data)
 
     package = load_model()
     if isinstance(package, dict):
@@ -596,17 +600,17 @@ def render_home():
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
-        st.metric(label="F1-Score", value=f"{f1:.0%}" if f1 else "N/A")
+        st.metric(label="F1-Score", value=f"{f1:.0%}" if pd.notna(f1) else "N/A")
     with col2:
-        st.metric(label="AUC-ROC", value=f"{auc:.0%}" if auc else "N/A")
+        st.metric(label="AUC-ROC", value=f"{auc:.0%}" if pd.notna(auc) else "N/A")
     with col3:
-        st.metric(label="Precision", value=f"{prec:.0%}" if prec else "N/A")
+        st.metric(label="Precision", value=f"{prec:.0%}" if pd.notna(prec) else "N/A")
     with col4:
-        st.metric(label="Recall", value=f"{rec:.0%}" if rec else "N/A")
+        st.metric(label="Recall", value=f"{rec:.0%}" if pd.notna(rec) else "N/A")
     with col5:
-        st.metric(label="Accuracy", value=f"{acc:.0%}" if acc else "N/A")
+        st.metric(label="Accuracy", value=f"{acc:.0%}" if pd.notna(acc) else "N/A")
     with col6:
-        st.metric(label="AUPRC", value=f"{auprc:.0%}" if auprc else "N/A")
+        st.metric(label="AUPRC", value=f"{auprc:.0%}" if pd.notna(auprc) else "N/A")
 
     st.markdown("---")
 
@@ -1108,17 +1112,17 @@ def render_performance():
         # Cards de métricas
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         with col1:
-            st.metric("F1-Score", f"{f1:.4f}" if f1 else "N/A")
+            st.metric("F1-Score", f"{f1:.4f}" if pd.notna(f1) else "N/A")
         with col2:
-            st.metric("Precision", f"{prec:.4f}" if prec else "N/A")
+            st.metric("Precision", f"{prec:.4f}" if pd.notna(prec) else "N/A")
         with col3:
-            st.metric("Recall", f"{rec:.4f}" if rec else "N/A")
+            st.metric("Recall", f"{rec:.4f}" if pd.notna(rec) else "N/A")
         with col4:
-            st.metric("AUC-ROC", f"{auc:.4f}" if auc else "N/A")
+            st.metric("AUC-ROC", f"{auc:.4f}" if pd.notna(auc) else "N/A")
         with col5:
-            st.metric("Accuracy", f"{acc:.4f}" if acc else "N/A")
+            st.metric("Accuracy", f"{acc:.4f}" if pd.notna(acc) else "N/A")
         with col6:
-            st.metric("AUPRC", f"{auprc:.4f}" if auprc else "N/A")
+            st.metric("AUPRC", f"{auprc:.4f}" if pd.notna(auprc) else "N/A")
 
         if threshold is not None:
             st.caption(f"Threshold de classificação: {threshold}")
@@ -1128,12 +1132,12 @@ def render_performance():
             {
                 "Métrica": ["F1-Score", "Precision", "Recall", "AUC-ROC", "Accuracy", "AUPRC"],
                 "Valor": [
-                    f"{f1:.4f}" if f1 else "N/A",
-                    f"{prec:.4f}" if prec else "N/A",
-                    f"{rec:.4f}" if rec else "N/A",
-                    f"{auc:.4f}" if auc else "N/A",
-                    f"{acc:.4f}" if acc else "N/A",
-                    f"{auprc:.4f}" if auprc else "N/A",
+                    f"{f1:.4f}" if pd.notna(f1) else "N/A",
+                    f"{prec:.4f}" if pd.notna(prec) else "N/A",
+                    f"{rec:.4f}" if pd.notna(rec) else "N/A",
+                    f"{auc:.4f}" if pd.notna(auc) else "N/A",
+                    f"{acc:.4f}" if pd.notna(acc) else "N/A",
+                    f"{auprc:.4f}" if pd.notna(auprc) else "N/A",
                 ],
                 "Descrição": [
                     "Média harmônica de Precision e Recall",
@@ -1153,8 +1157,11 @@ def render_performance():
         metrics_json_path = REPORTS_DIR / "metrics.json"
         raw_metrics = {}
         if metrics_json_path.exists():
-            with open(metrics_json_path) as f:
-                raw_metrics = json.load(f)
+            try:
+                with open(metrics_json_path) as f:
+                    raw_metrics = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                pass
         cv_f1_std = raw_metrics.get("cv_f1_std")
         cv_roc_std = raw_metrics.get("cv_roc_auc_std")
         cv_f1_m = raw_metrics.get("cv_f1_mean")
@@ -1686,10 +1693,13 @@ def render_model_comparison():
     if metrics_json_path.exists():
         import json
 
-        with open(metrics_json_path) as f:
-            _mj = json.load(f)
-        for algo_key, algo_metrics in _mj.get("individual_results", {}).items():
-            individual_results[algo_key] = normalize_metrics_keys(algo_metrics)
+        try:
+            with open(metrics_json_path) as f:
+                _mj = json.load(f)
+            for algo_key, algo_metrics in _mj.get("individual_results", {}).items():
+                individual_results[algo_key] = normalize_metrics_keys(algo_metrics)
+        except (OSError, json.JSONDecodeError):
+            st.warning("⚠️ Erro ao ler metrics.json — métricas de fallback indisponíveis.")
 
     for model_info in available_models:
         try:
@@ -1739,11 +1749,12 @@ def render_model_comparison():
                     algorithm = parsed_algo.upper()
 
             # Extrai métricas chave (já normalizadas)
-            # Fallback: preenche métricas ausentes com metrics.json
+            # Fallback: preenche métricas ausentes/nulas com metrics.json
             for algo_key, algo_m in individual_results.items():
                 if algo_key in model_info["name"].lower():
                     for k, v in algo_m.items():
-                        metrics.setdefault(k, v)
+                        if not pd.notna(metrics.get(k)):
+                            metrics[k] = v
                     break
 
             f1 = metrics.get("f1_score")
