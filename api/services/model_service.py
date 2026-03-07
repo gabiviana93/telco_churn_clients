@@ -221,6 +221,56 @@ class ModelService:
                 "error": str(e),
             }
 
+    def reload_model(self, model_name: str) -> None:
+        """Recarrega o serviço com um modelo diferente.
+
+        Carrega o novo modelo em variáveis locais e faz swap atômico das
+        referências no final, evitando que requisições concorrentes vejam
+        o serviço em estado parcialmente inicializado.
+
+        Args:
+            model_name: Nome do modelo (sem extensão .joblib).
+
+        Raises:
+            FileNotFoundError: Se o modelo não existir.
+            RuntimeError: Se falhar ao carregar o modelo.
+        """
+        from src.config import get_model_path
+
+        model_path = get_model_path(model_name)
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_path}")
+
+        # Carrega o novo modelo em uma instância temporária isolada
+        original_path = settings.model_path_resolved
+        settings.MODEL_PATH = str(model_path)
+        try:
+            loader = object.__new__(ModelService)
+            loader._model = None
+            loader._pipeline = None
+            loader._preprocessor = None
+            loader._feature_engineer = None
+            loader._threshold = 0.5
+            loader._model_info = {}
+            loader._start_time = self._start_time
+            loader._initialized = True
+            loader._load_model()
+            if not loader.is_loaded:
+                raise RuntimeError(f"Failed to load model: {model_name}")
+            loader._model_info["file_model_name"] = model_name
+        except Exception:
+            settings.MODEL_PATH = str(original_path) if original_path else None
+            raise
+
+        # Swap atômico — requisições concorrentes veem estado antigo ou novo, nunca parcial
+        self._model = loader._model
+        self._pipeline = loader._pipeline
+        self._preprocessor = loader._preprocessor
+        self._feature_engineer = loader._feature_engineer
+        self._threshold = loader._threshold
+        self._model_info = loader._model_info
+        logger.info("Model reloaded successfully", model_name=model_name)
+
     @property
     def is_loaded(self) -> bool:
         """Verifica se o modelo está carregado."""
@@ -248,6 +298,16 @@ class ModelService:
     def pipeline(self) -> ChurnPipeline | None:
         """Obtém o ChurnPipeline se disponível."""
         return self._pipeline
+
+    @property
+    def preprocessor(self):
+        """Obtém o pré-processador se disponível (modelos legados)."""
+        return self._preprocessor
+
+    @property
+    def feature_engineer(self):
+        """Obtém o feature engineer se disponível (modelos legados)."""
+        return self._feature_engineer
 
     def get_model_info(self) -> dict[str, Any]:
         """Obtém metadados e informações do modelo."""
@@ -343,6 +403,15 @@ class ModelService:
                         feature_names = get_feature_names(preprocessor)
                     except Exception:
                         pass
+
+            # Fallback: usar preprocessor armazenado (modelos legados)
+            if feature_names is None and self._preprocessor is not None:
+                from src.interpret import get_feature_names
+
+                try:
+                    feature_names = get_feature_names(self._preprocessor)
+                except Exception:
+                    pass
 
             # Fallback para nomes genéricos se extração do preprocessador falhar
             if feature_names is None or len(feature_names) != len(importances):

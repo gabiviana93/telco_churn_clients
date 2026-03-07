@@ -231,12 +231,14 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
 
     def _fit_supervised_encodings(self, df, y):
         """Calcula mapeamentos supervisionados baseados no target."""
-        churn_by_contract = pd.Series(y).groupby(df["Contract"]).mean()
+        # Alinhar índices para evitar mismatch após train_test_split
+        y_aligned = pd.Series(np.asarray(y), index=df.index)
+        churn_by_contract = y_aligned.groupby(df["Contract"]).mean()
         order = churn_by_contract.sort_values(ascending=False).index
 
         self.contract_order_map_ = {name: i for i, name in enumerate(order)}
         self.contract_churn_rate_map_ = churn_by_contract.to_dict()
-        self.global_churn_rate_ = float(pd.Series(y).mean())
+        self.global_churn_rate_ = float(y_aligned.mean())
 
         logger.info(f"Mapeamento ordinal: {self.contract_order_map_}")
         logger.info(f"Taxa de churn por contrato: {self.contract_churn_rate_map_}")
@@ -406,6 +408,8 @@ class AdvancedFeatureEngineer(FeatureEngineer):
         # Risk scores por categoria
         if y is not None:
             y_binary = convert_target_to_binary(y, positive_class=POSITIVE_CLASS)
+            # Alinhar índices para evitar KeyError após train_test_split
+            y_binary = pd.Series(y_binary.values, index=df.index)
 
             if "InternetService" in df.columns:
                 self.internet_service_risk_ = (

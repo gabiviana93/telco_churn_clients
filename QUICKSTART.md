@@ -76,14 +76,14 @@ print('Todas as dependências estão instaladas')
 
 ## 3. Executar Testes
 
-### 3.1 Testes Completos (190 testes)
+### 3.1 Testes Completos (196 testes)
 
 ```bash
 # Executar todos os testes
 poetry run pytest tests/ -v
 
 # Saída esperada:
-# ======================= 190 passed in ~30s =======================
+# ======================= 196 passed in ~30s =======================
 ```
 
 ### 3.2 Testes por Módulo
@@ -230,7 +230,27 @@ curl -X POST http://localhost:8000/predict/ \
 # {"success":true,"prediction":{"customer_id":"test-001","churn_prediction":1,"churn_probability":0.84,"churn_risk":"HIGH"},...}
 ```
 
-### 5.4 Documentação da API (Swagger)
+### 5.4 Gerenciamento de Modelos via API
+
+```bash
+# Listar modelos disponíveis
+curl http://localhost:8000/models/
+
+# Saída esperada:
+# {"models":[{"name":"model","filename":"model.joblib","size_mb":1.23,"is_default":true},...],"active_model":"model_catboost","total":5}
+
+# Trocar o modelo ativo
+curl -X POST http://localhost:8000/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "model_xgboost"}'
+
+# Saída esperada:
+# {"success":true,"active_model":"model_xgboost","estimator_name":"XGBClassifier","message":"Modelo trocado para 'model_xgboost' com sucesso."}
+```
+
+> **Nota:** O Dashboard detecta automaticamente se a API está online. Quando online, a seleção de modelo no sidebar troca o modelo diretamente na API, garantindo consistência entre Dashboard e API.
+
+### 5.5 Documentação da API (Swagger)
 
 Acesse: **http://localhost:8000/docs**
 
@@ -265,7 +285,7 @@ Acesse: **http://localhost:8501**
 - **Data Drift**: Monitoramento de drift com PSI (upload CSV)
 - **MLflow**: Tracking de experimentos
 
-> **Nota:** O nome do modelo ativo é exibido em cada página do dashboard. Troque o modelo pela sidebar.
+> **Nota:** O nome do modelo ativo é exibido em cada página do dashboard. Troque o modelo pela sidebar. Quando a API está online, a troca de modelo é sincronizada automaticamente via `POST /models/switch`.
 
 ---
 
@@ -489,7 +509,7 @@ Execute este checklist para validar que tudo está funcionando:
 ```bash
 # 1. Testes unitários
 poetry run pytest tests/ -v
-# Esperado: 190 passed
+# Esperado: 196 passed
 
 # 2. API - Health
 curl http://localhost:8000/health 2>/dev/null | grep -q "healthy" && echo "API OK" || echo "API FAIL"

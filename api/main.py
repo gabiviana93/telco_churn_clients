@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 from api.core.config import settings
 from api.core.logging import get_logger, setup_logging
-from api.routes import drift, health, interpret, prediction
+from api.routes import drift, health, interpret, models, prediction
 from api.services.model_service import model_service
 
 # Configurar logging
@@ -64,6 +64,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     openapi_tags=[
         {"name": "Predictions", "description": "Customer churn prediction endpoints"},
+        {"name": "Model Management", "description": "List and switch active models"},
         {"name": "Data Drift", "description": "Data drift detection and monitoring"},
         {"name": "Health & Monitoring", "description": "API health checks and model monitoring"},
     ],
@@ -82,6 +83,7 @@ app.add_middleware(
 
 # Incluir routers
 app.include_router(prediction.router)
+app.include_router(models.router)
 app.include_router(drift.router)
 app.include_router(health.router)
 app.include_router(interpret.router)
@@ -102,6 +104,8 @@ async def root():
             "drift_detect": "/drift/detect",
             "drift_status": "/drift/status",
             "health": "/health",
+            "models_list": "/models/",
+            "models_switch": "/models/switch",
             "model_info": "/model/info",
             "feature_importance": "/interpret/feature-importance",
         },

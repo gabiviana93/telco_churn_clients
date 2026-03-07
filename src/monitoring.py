@@ -14,12 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ks_2samp
 
-from src.config import (
-    DRIFT_ESCALATION_LOW_FRACTION,
-    DRIFT_ESCALATION_MODERATE_COUNT,
-    DRIFT_PSI_BINS,
-    DRIFT_PSI_THRESHOLDS,
-)
+from src.config import DRIFT_ESCALATION_MODERATE_COUNT, DRIFT_PSI_BINS, DRIFT_PSI_THRESHOLDS
 from src.enums import DriftSeverity
 from src.logger import setup_logger
 
@@ -38,8 +33,13 @@ class DriftResult:
 
     @property
     def has_drift(self) -> bool:
-        """Verifica se a feature tem drift significativo."""
+        """Verifica se a feature tem drift significativo (MODERATE ou HIGH)."""
         return self.severity in (DriftSeverity.MODERATE, DriftSeverity.HIGH)
+
+    @property
+    def has_any_drift(self) -> bool:
+        """Verifica se a feature tem qualquer nível de drift (LOW, MODERATE ou HIGH)."""
+        return self.severity != DriftSeverity.NONE
 
 
 @dataclass
@@ -79,7 +79,7 @@ def population_stability_index(
     expected: np.ndarray, actual: np.ndarray, bins: int = DRIFT_PSI_BINS
 ) -> float:
     """
-    Calcula o Population Stability Index (PSI).
+    Calcula o Population Stability Index (PSI) para features numéricas.
 
     PSI mede o quanto uma distribuição mudou entre dois conjuntos de dados.
 
@@ -116,6 +116,49 @@ def population_stability_index(
     actual_perc = np.clip(actual_perc, epsilon, 1)
 
     psi = np.sum((actual_perc - expected_perc) * np.log(actual_perc / expected_perc))
+    return float(psi)
+
+
+def categorical_psi(expected: np.ndarray, actual: np.ndarray) -> float:
+    """
+    Calcula PSI para features categóricas usando proporções por categoria.
+
+    Diferente do PSI numérico (histogram bins), este método compara
+    as proporções de cada categoria diretamente.
+
+    Args:
+        expected: Valores categóricos de referência
+        actual: Valores categóricos atuais
+
+    Returns:
+        Valor PSI baseado em proporções por categoria
+    """
+    if len(expected) == 0 or len(actual) == 0:
+        return 0.0
+
+    # Converte para Series para usar value_counts
+    exp_series = pd.Series(expected).dropna()
+    act_series = pd.Series(actual).dropna()
+
+    # Obtém todas as categorias (união)
+    all_categories = set(exp_series.unique()) | set(act_series.unique())
+
+    if not all_categories:
+        return 0.0
+
+    epsilon = 1e-6
+    psi = 0.0
+
+    exp_counts = exp_series.value_counts()
+    act_counts = act_series.value_counts()
+    n_exp = len(exp_series)
+    n_act = len(act_series)
+
+    for cat in all_categories:
+        exp_prop = max(exp_counts.get(cat, 0) / n_exp, epsilon)
+        act_prop = max(act_counts.get(cat, 0) / n_act, epsilon)
+        psi += (act_prop - exp_prop) * np.log(act_prop / exp_prop)
+
     return float(psi)
 
 
@@ -163,6 +206,7 @@ def detect_drift(
     logger.info(f"Starting drift detection for {len(features)} features")
 
     categorical_features = categorical_features or []
+    cat_set = set(categorical_features)
     results: list[DriftResult] = []
     severity_counts = {s.value: 0 for s in DriftSeverity}
 
@@ -177,16 +221,28 @@ def detect_drift(
         if len(ref_data) == 0 or len(curr_data) == 0:
             continue
 
-        # Calculate PSI (works for both numeric and encoded categorical)
+        is_cat = col in cat_set
+
+        # Calculate PSI — usa método adequado para cada tipo
         try:
-            psi = population_stability_index(ref_data.values, curr_data.values)
+            if is_cat:
+                psi = categorical_psi(ref_data.values, curr_data.values)
+            else:
+                psi = population_stability_index(ref_data.values, curr_data.values)
         except Exception as e:
             logger.warning(f"PSI calculation failed for {col}: {e}")
             psi = 0.0
 
-        # KS test for numeric features
+        # KS test (converte categóricas para codes para o teste estatístico)
         try:
-            ks_stat, ks_pvalue = ks_2samp(ref_data.values, curr_data.values)
+            if is_cat:
+                all_cats = sorted(set(ref_data.unique()) | set(curr_data.unique()))
+                cat_map = {c: i for i, c in enumerate(all_cats)}
+                ref_coded = ref_data.map(cat_map).values
+                curr_coded = curr_data.map(cat_map).values
+                ks_stat, ks_pvalue = ks_2samp(ref_coded, curr_coded)
+            else:
+                ks_stat, ks_pvalue = ks_2samp(ref_data.values, curr_data.values)
         except Exception as e:
             logger.warning(f"KS test failed for {col}: {e}")
             ks_stat, ks_pvalue = 0.0, 1.0
@@ -204,14 +260,20 @@ def detect_drift(
             )
         )
 
-    # Determine overall severity
-    features_with_drift = sum(1 for r in results if r.has_drift)
+    # Determine overall severity — baseado em contagem de features afetadas
+    features_with_drift = sum(1 for r in results if r.has_any_drift)
+    high_count = severity_counts[DriftSeverity.HIGH.value]
+    mod_count = severity_counts[DriftSeverity.MODERATE.value]
+    low_count = severity_counts[DriftSeverity.LOW.value]
 
-    if severity_counts[DriftSeverity.HIGH.value] > 0:
+    if high_count >= DRIFT_ESCALATION_MODERATE_COUNT:
+        # 2+ features com drift severo → ação necessária
         overall_severity = DriftSeverity.HIGH
-    elif severity_counts[DriftSeverity.MODERATE.value] > DRIFT_ESCALATION_MODERATE_COUNT:
+    elif high_count > 0 or mod_count >= DRIFT_ESCALATION_MODERATE_COUNT:
+        # 1 feature severa ou várias moderadas → investigar
         overall_severity = DriftSeverity.MODERATE
-    elif severity_counts[DriftSeverity.LOW.value] > len(results) * DRIFT_ESCALATION_LOW_FRACTION:
+    elif mod_count > 0 or low_count > 0:
+        # Qualquer drift detectado → monitorar
         overall_severity = DriftSeverity.LOW
     else:
         overall_severity = DriftSeverity.NONE

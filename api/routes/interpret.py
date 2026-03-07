@@ -34,8 +34,8 @@ class InterpretFeatureImportanceResponse(BaseModel):
 
     success: bool = True
     feature_importances: list[FeatureImportance]
-    model_type: str = Field(..., description="Type of model")
-    total_features: int = Field(..., description="Total number of features")
+    model_type: str = Field(..., description="Tipo de modelo")
+    total_features: int = Field(..., description="Número total de features")
 
 
 class ShapValue(BaseModel):
@@ -50,14 +50,14 @@ class ShapExplanation(BaseModel):
     """Explicação SHAP para uma única predição."""
 
     customer_id: str | None = None
-    base_value: float = Field(..., description="Expected model output")
-    prediction_value: float = Field(..., description="Model output for this instance")
+    base_value: float = Field(..., description="Valor esperado do modelo")
+    prediction_value: float = Field(..., description="Valor do modelo para esta instância")
     shap_values: list[ShapValue]
     top_positive_contributors: list[ShapValue] = Field(
-        ..., description="Features that increase churn probability"
+        ..., description="Features que aumentam a probabilidade de churn"
     )
     top_negative_contributors: list[ShapValue] = Field(
-        ..., description="Features that decrease churn probability"
+        ..., description="Features que diminuem a probabilidade de churn"
     )
 
 
@@ -71,9 +71,9 @@ class ShapExplanationResponse(BaseModel):
 class ShapExplainRequest(BaseModel):
     """Corpo da requisição para endpoint de explicação SHAP."""
 
-    customer_id: str | None = Field(None, description="Optional customer identifier")
+    customer_id: str | None = Field(None, description="Identificador opcional do cliente")
     features: dict[str, float | int | str] = Field(
-        ..., description="Customer features for explanation"
+        ..., description="Features do cliente para explicação SHAP"
     )
 
 
@@ -82,9 +82,9 @@ class GlobalShapResponse(BaseModel):
 
     success: bool = True
     mean_abs_shap: list[FeatureImportance] = Field(
-        ..., description="Mean absolute SHAP values per feature"
+        ..., description="Valores SHAP absolutos médios por feature"
     )
-    sample_size: int = Field(..., description="Number of samples used")
+    sample_size: int = Field(..., description="Número de amostras utilizadas")
 
 
 # ============================================================================
@@ -113,7 +113,15 @@ def _extract_model_and_preprocessor(
     elif model_service.model is not None:
         model, preprocessor, _ = extract_model_components(model_service.model)
     else:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not loaded")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error_code": "MODEL_NOT_LOADED", "message": "Model not loaded"},
+        )
+
+    # Fallback: usar preprocessor do ModelService para modelos legados
+    if preprocessor is None and model_service.preprocessor is not None:
+        preprocessor = model_service.preprocessor
+
     return model, preprocessor
 
 
@@ -152,11 +160,11 @@ def _create_shap_explainer(model, X_background=None):
         return shap.TreeExplainer(model)
     if _is_linear_model(model):
         if X_background is None:
-            raise ValueError("X_background is required for LinearExplainer")
+            raise ValueError("X_background é necessário para o LinearExplainer")
         return shap.LinearExplainer(model, X_background)
     # Fallback genérico para qualquer modelo
     if X_background is None:
-        raise ValueError("X_background is required for KernelExplainer")
+        raise ValueError("X_background é necessário para o KernelExplainer")
 
     def predict_fn(x):
         if hasattr(model, "predict_proba"):
@@ -188,12 +196,14 @@ def _extract_shap_values(shap_values, expected_value, *, single_instance: bool =
     return sv, float(ev)
 
 
-def _transform_and_get_names(preprocessor, df: pd.DataFrame) -> tuple:
+def _transform_and_get_names(preprocessor, df: pd.DataFrame, feature_engineer=None) -> tuple:
     """Transforma dados e obtém nomes de features.
 
     Returns:
         Tupla de (X_transformado, nomes_features)
     """
+    if feature_engineer is not None:
+        df = feature_engineer.transform(df)
     if preprocessor is not None:
         X_transformed = preprocessor.transform(df)
         feature_names = get_feature_names(preprocessor)
@@ -203,7 +213,7 @@ def _transform_and_get_names(preprocessor, df: pd.DataFrame) -> tuple:
     return X_transformed, feature_names
 
 
-def _load_background_sample(preprocessor, n: int = 100) -> np.ndarray:
+def _load_background_sample(preprocessor, n: int = 100, feature_engineer=None) -> np.ndarray:
     """Carrega amostra de background dos dados de referência para explainers não-tree."""
     data_path = DATA_DIR_RAW / FILENAME
     df = pd.read_csv(data_path)
@@ -212,7 +222,7 @@ def _load_background_sample(preprocessor, n: int = 100) -> np.ndarray:
         df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df = df.dropna()
     df = df.sample(n=min(n, len(df)), random_state=RANDOM_STATE)
-    X, _ = _transform_and_get_names(preprocessor, df)
+    X, _ = _transform_and_get_names(preprocessor, df, feature_engineer=feature_engineer)
     return X
 
 
@@ -232,7 +242,7 @@ async def get_feature_importance(
     model_service: ModelService = Depends(get_model_service),
 ) -> InterpretFeatureImportanceResponse:
     """Obtém importância de features do modelo."""
-    logger.info("Getting feature importance", top_n=top_n)
+    logger.info("Obtendo importância de features", top_n=top_n)
 
     try:
         # Use existing get_feature_importance method
@@ -241,7 +251,10 @@ async def get_feature_importance(
         if not importances_list:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Feature importance not available for this model",
+                detail={
+                    "error_code": "FEATURE_IMPORTANCE_NOT_AVAILABLE",
+                    "message": "Importância de features não disponível para este modelo",
+                },
             )
 
         # Convert to our format and limit to top_n
@@ -267,7 +280,10 @@ async def get_feature_importance(
         logger.error("Failed to get feature importance", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get feature importance: {str(e)}",
+            detail={
+                "error_code": "FEATURE_IMPORTANCE_ERROR",
+                "message": f"Falha ao obter importância de features: {str(e)}",
+            },
         ) from e
 
 
@@ -290,10 +306,11 @@ async def explain_prediction(
         import shap  # noqa: F401
     except ImportError as exc:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="SHAP library not installed"
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"error_code": "SHAP_NOT_INSTALLED", "message": "Biblioteca SHAP não instalada"},
         ) from exc
 
-    logger.info("Generating SHAP explanation")
+    logger.info("Gerando explicação SHAP")
 
     try:
         customer_id = request.customer_id
@@ -304,12 +321,15 @@ async def explain_prediction(
 
         # Get model, preprocessor and transform data
         model, preprocessor = _extract_model_and_preprocessor(model_service)
-        X_transformed, feature_names = _transform_and_get_names(preprocessor, df)
+        fe = model_service.feature_engineer
+        X_transformed, feature_names = _transform_and_get_names(
+            preprocessor, df, feature_engineer=fe
+        )
 
         # For non-tree models, load background sample from reference data
         X_background = None
         if not _is_tree_model(model):
-            X_background = _load_background_sample(preprocessor, n=100)
+            X_background = _load_background_sample(preprocessor, n=100, feature_engineer=fe)
 
         # Create appropriate SHAP explainer for the model type
         explainer = _create_shap_explainer(model, X_background=X_background)
@@ -323,9 +343,7 @@ async def explain_prediction(
 
         # Build SHAP value list
         shap_list = []
-        for i, (feat, sv) in enumerate(
-            zip(feature_names[: len(sample_shap)], sample_shap, strict=False)
-        ):
+        for i, (feat, sv) in enumerate(zip(feature_names, sample_shap, strict=True)):
             feat_val = float(X_transformed[0, i]) if isinstance(X_transformed, np.ndarray) else None
             shap_list.append(
                 ShapValue(
@@ -349,20 +367,26 @@ async def explain_prediction(
             top_negative_contributors=top_negative,
         )
 
-        logger.info("SHAP explanation generated successfully")
+        logger.info("Explicação SHAP gerada com sucesso")
 
         return ShapExplanationResponse(success=True, explanation=explanation)
 
     except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="SHAP requires additional dependencies",
+            detail={
+                "error_code": "SHAP_DEPENDENCY_ERROR",
+                "message": "SHAP requer dependências adicionais",
+            },
         ) from exc
     except Exception as e:
-        logger.error("SHAP explanation failed", error=str(e))
+        logger.error("Erro na explicação SHAP", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"SHAP explanation failed: {str(e)}",
+            detail={
+                "error_code": "SHAP_EXPLANATION_ERROR",
+                "message": f"Erro na explicação SHAP: {str(e)}",
+            },
         ) from e
 
 
@@ -373,8 +397,10 @@ async def explain_prediction(
     description="Retorna valores SHAP absolutos médios de uma amostra de dados.",
 )
 async def get_global_shap(
-    sample_size: int = Query(default=100, ge=10, le=500, description="Sample size for SHAP"),
-    top_n: int = Query(default=20, ge=1, le=50, description="Number of top features"),
+    sample_size: int = Query(
+        default=100, ge=10, le=500, description="Tamanho da amostra para SHAP"
+    ),
+    top_n: int = Query(default=20, ge=1, le=50, description="Número de principais features"),
     model_service: ModelService = Depends(get_model_service),
 ) -> GlobalShapResponse:
     """Obtém estatísticas resumidas SHAP globais."""
@@ -382,10 +408,11 @@ async def get_global_shap(
         import shap  # noqa: F401
     except ImportError as exc:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="SHAP library not installed"
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"error_code": "SHAP_NOT_INSTALLED", "message": "Biblioteca SHAP não instalada"},
         ) from exc
 
-    logger.info("Calculating global SHAP summary", sample_size=sample_size)
+    logger.info("Calculando resumo SHAP global", sample_size=sample_size)
 
     try:
         # Load sample data
@@ -401,7 +428,10 @@ async def get_global_shap(
 
         # Get model, preprocessor and transform data
         model, preprocessor = _extract_model_and_preprocessor(model_service)
-        X_transformed, feature_names = _transform_and_get_names(preprocessor, df)
+        fe = model_service.feature_engineer
+        X_transformed, feature_names = _transform_and_get_names(
+            preprocessor, df, feature_engineer=fe
+        )
 
         # Create appropriate SHAP explainer for the model type
         explainer = _create_shap_explainer(model, X_background=X_transformed)
@@ -419,7 +449,7 @@ async def get_global_shap(
         shap_importance = []
         for i, (feat, val) in enumerate(
             sorted(
-                zip(feature_names[: len(mean_abs_shap)], mean_abs_shap, strict=False),
+                zip(feature_names, mean_abs_shap, strict=True),
                 key=lambda x: x[1],
                 reverse=True,
             )[:top_n]
@@ -428,13 +458,16 @@ async def get_global_shap(
                 FeatureImportance(feature_name=feat, importance=round(float(val), 6), rank=i + 1)
             )
 
-        logger.info("Global SHAP summary calculated")
+        logger.info("Resumo SHAP global calculado")
 
         return GlobalShapResponse(success=True, mean_abs_shap=shap_importance, sample_size=len(df))
 
     except Exception as e:
-        logger.error("Global SHAP calculation failed", error=str(e))
+        logger.error("Erro no cálculo do SHAP global", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Global SHAP calculation failed: {str(e)}",
+            detail={
+                "error_code": "GLOBAL_SHAP_ERROR",
+                "message": f"Erro no cálculo do SHAP global: {str(e)}",
+            },
         ) from e

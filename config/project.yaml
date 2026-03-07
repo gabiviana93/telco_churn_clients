@@ -15,7 +15,7 @@
 # ------------------------------------------------------------------------------
 project:
   name: "churn_clientes"
-  version: "1.3.0"
+  version: "1.8.1"
   description: "Predição de Churn de Clientes de Telecomunicações"
   author: "Gabriela"
   language: "pt-BR"
@@ -381,7 +381,7 @@ api:
     * **Model Insights**: Feature importance and model metrics
     * **Health Monitoring**: API and model health status
   
-  version: "1.3.0"
+  version: "1.8.1"
   host: "0.0.0.0"
   port: 8000
   workers: 4

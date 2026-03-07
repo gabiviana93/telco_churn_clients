@@ -11,7 +11,7 @@
 [![CatBoost](https://img.shields.io/badge/CatBoost-1.2-yellow.svg)](https://catboost.ai/)
 [![Optuna](https://img.shields.io/badge/Optuna-4.7-blueviolet.svg)](https://optuna.org/)
 [![MLflow](https://img.shields.io/badge/MLflow-2.22-0194E2.svg)](https://mlflow.org/)
-[![Tests](https://img.shields.io/badge/tests-190%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-196%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-74%25-green.svg)]()
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.54-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)](https://www.docker.com/)
@@ -92,7 +92,7 @@ Este projeto demonstra competências em todo o ciclo de Data Science:
 ### MLOps & Production
 - **Tracking**: MLflow para experimentos
 - **API REST**: FastAPI com validação Pydantic
-- **Testing**: 190 testes pytest com 74% coverage
+- **Testing**: 196 testes pytest com 74% coverage
 - **Containerização**: Docker multi-stage com docker-compose
 - **CI/CD**: 3 workflows GitHub Actions (CI, Code Quality, PR Analysis)
 
@@ -216,7 +216,7 @@ churn_clientes/
 │
 ├── api/                          # API REST (FastAPI)
 │   ├── main.py                   # Aplicação FastAPI
-│   ├── routes/                   # Endpoints (predict, health, interpret, drift)
+│   ├── routes/                   # Endpoints (predict, models, health, interpret, drift)
 │   ├── schemas/                  # Modelos Pydantic
 │   └── services/                 # Lógica de negócio (ModelService)
 │
@@ -248,7 +248,7 @@ churn_clientes/
 │   ├── 03_modeling.ipynb         # Modelagem otimizada
 │   └── 04_shap_interpretability.ipynb  # Interpretabilidade SHAP
 │
-├── tests/                        # Suite de testes (190 testes, 74% coverage)
+├── tests/                        # Suite de testes (196 testes, 74% coverage)
 ├── models/                       # Modelos treinados (.joblib)
 ├── reports/                      # Relatórios (metrics.json, drift.json)
 ├── config/                       # Configurações YAML (project.yaml)
@@ -274,8 +274,8 @@ O projeto usa as **mesmas classes** em todos os componentes:
 |------------|-------------------|
 | Notebooks | `ChurnPipeline`, `HyperparameterOptimizer` |
 | Scripts | `ChurnPipeline`, `evaluate()` |
-| API REST | `ModelService` (usa `load_model_package`) |
-| Dashboard | `load_model()`, `predict_via_api()`, `_load_metrics_from_report()` |
+| API REST | `ModelService` (usa `load_model_package`, hot-swap via `/models/switch`) |
+| Dashboard | `load_model()`, `predict_via_api()`, `switch_model_via_api()` |
 
 ---
 
@@ -287,6 +287,8 @@ O projeto usa as **mesmas classes** em todos os componentes:
 |--------|----------|-----------|
 | `POST` | `/predict/` | Predição individual |
 | `POST` | `/predict/batch` | Predição em lote |
+| `GET` | `/models/` | Listar modelos disponíveis |
+| `POST` | `/models/switch` | Trocar modelo ativo |
 | `GET` | `/health` | Status da API |
 | `GET` | `/health/live` | Liveness probe (Kubernetes) |
 | `GET` | `/health/ready` | Readiness probe (Kubernetes) |
@@ -338,7 +340,7 @@ print(response.json())
 ## Testes
 
 ```bash
-# Executar todos os testes (190 testes)
+# Executar todos os testes (196 testes)
 poetry run pytest
 
 # Com relatório de cobertura (mínimo 70%)
@@ -348,7 +350,7 @@ poetry run pytest --cov=src --cov=api --cov-report=html
 make test
 ```
 
-**190 testes** (74% coverage) cobrindo:
+**196 testes** (74% coverage) cobrindo:
 - Endpoints da API (predict, health, interpret, drift)
 - Feature Engineering (FeatureEngineer + AdvancedFeatureEngineer)
 - Utilitários e Notebook Utils (IV, outliers, métricas)

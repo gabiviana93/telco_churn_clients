@@ -184,7 +184,7 @@ def load_model():
         return None
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_sample_data():
     """Carrega dados de exemplo para visualização."""
     data_path = DATA_DIR_RAW / FILENAME
@@ -298,14 +298,23 @@ def predict_locally(model_or_package, customer_data: dict) -> dict | None:
         if isinstance(model_or_package, dict):
             model = model_or_package.get("model")
             threshold = model_or_package.get("threshold", 0.5)
+            feature_engineer = model_or_package.get("feature_engineer")
+            scaler = model_or_package.get("scaler")
         else:
             model = model_or_package
             threshold = 0.5
+            feature_engineer = None
+            scaler = None
 
         if model is None:
             return None
 
         df = pd.DataFrame([customer_data])
+
+        if feature_engineer is not None:
+            df = feature_engineer.transform(df)
+        if scaler is not None:
+            df = pd.DataFrame(scaler.transform(df))
 
         if hasattr(model, "predict_proba"):
             proba = model.predict_proba(df)[0]
@@ -323,6 +332,30 @@ def predict_locally(model_or_package, customer_data: dict) -> dict | None:
     except Exception as e:
         st.error(f"Prediction Error: {e}")
     return None
+
+
+def list_models_via_api() -> dict[str, Any] | None:
+    """Lista modelos disponíveis via API."""
+    try:
+        response = requests.get(f"{API_URL}/models/", timeout=5)
+        if response.status_code == 200:
+            return response.json()
+    except (requests.RequestException, ConnectionError):
+        pass
+    return None
+
+
+def switch_model_via_api(model_name: str) -> bool:
+    """Troca o modelo ativo na API. Retorna True se bem-sucedido."""
+    try:
+        response = requests.post(
+            f"{API_URL}/models/switch",
+            json={"model_name": model_name},
+            timeout=15,
+        )
+        return response.status_code == 200
+    except (requests.RequestException, ConnectionError):
+        return False
 
 
 def render_sidebar():
@@ -344,49 +377,101 @@ def render_sidebar():
 
     st.sidebar.markdown("---")
 
+    # Verifica status da API antes da seleção de modelo
+    api_online = check_api_health()
+
     # Seleção de Modelo
     st.sidebar.markdown("### 🤖 Seleção de Modelo")
-    available_models = get_available_models()
 
-    if available_models:
-        model_names = [m["name"] for m in available_models]
+    # Se API está online, busca modelos e modelo ativo da API
+    api_models_data = list_models_via_api() if api_online else None
 
-        # Obtém índice de seleção atual
+    if api_models_data is not None:
+        # --- Seleção via API ---
+        model_names = [m["name"] for m in api_models_data["models"]]
+
+        # Detecta índice do modelo ativo na API
         current_idx = 0
         if "selected_model_name" in st.session_state:
             try:
                 current_idx = model_names.index(st.session_state.selected_model_name)
             except ValueError:
                 current_idx = 0
+        else:
+            # Primeiro render: inicializa com o modelo ativo na API (sem disparar switch)
+            active_model = api_models_data.get("active_model")
+            if active_model and active_model in model_names:
+                current_idx = model_names.index(active_model)
+            st.session_state.selected_model_name = model_names[current_idx]
 
         selected_model_name = st.sidebar.selectbox(
-            "Modelo:",
+            "Modelo (via API):",
             model_names,
             index=current_idx,
-            help="Selecione o modelo a ser usado para predições",
+            help="Selecione o modelo — a troca é aplicada diretamente na API",
         )
 
-        # Atualiza session state
-        selected_model = next(
-            (m for m in available_models if m["name"] == selected_model_name), None
-        )
-        if selected_model:
-            st.session_state.selected_model_name = selected_model_name
-            st.session_state.selected_model_path = selected_model["path"]
+        # Troca modelo na API somente se o usuário de fato mudou a seleção
+        prev_selected = st.session_state.get("selected_model_name")
+        if prev_selected is not None and selected_model_name != prev_selected:
+            with st.sidebar.status("Trocando modelo na API..."):
+                ok = switch_model_via_api(selected_model_name)
+            if ok:
+                st.sidebar.success(f"Modelo na API trocado para {selected_model_name}")
+                load_model_by_path.clear()  # limpa cache local
+            else:
+                st.sidebar.error("Falha ao trocar modelo na API")
 
-            # Mostra info do modelo
-            st.sidebar.caption(
-                f"📁 Tamanho: {selected_model['size_mb']:.1f} MB\\n"
-                f"📅 Modificado: {selected_model['modified'].strftime('%d/%m/%Y %H:%M')}"
-            )
+        st.session_state.selected_model_name = selected_model_name
+
+        # Também atualiza path local para fallback
+        selected_info = next(
+            (m for m in api_models_data["models"] if m["name"] == selected_model_name), None
+        )
+        if selected_info:
+            from src.config import get_model_path
+
+            st.session_state.selected_model_path = get_model_path(selected_model_name)
+            st.sidebar.caption(f"📁 Tamanho: {selected_info['size_mb']:.1f} MB")
     else:
-        st.sidebar.warning("Nenhum modelo encontrado em models/")
+        # --- Seleção local (fallback) ---
+        available_models = get_available_models()
+
+        if available_models:
+            model_names = [m["name"] for m in available_models]
+
+            current_idx = 0
+            if "selected_model_name" in st.session_state:
+                try:
+                    current_idx = model_names.index(st.session_state.selected_model_name)
+                except ValueError:
+                    current_idx = 0
+
+            selected_model_name = st.sidebar.selectbox(
+                "Modelo:",
+                model_names,
+                index=current_idx,
+                help="Selecione o modelo a ser usado para predições",
+            )
+
+            selected_model = next(
+                (m for m in available_models if m["name"] == selected_model_name), None
+            )
+            if selected_model:
+                st.session_state.selected_model_name = selected_model_name
+                st.session_state.selected_model_path = selected_model["path"]
+
+                st.sidebar.caption(
+                    f"📁 Tamanho: {selected_model['size_mb']:.1f} MB\\n"
+                    f"📅 Modificado: {selected_model['modified'].strftime('%d/%m/%Y %H:%M')}"
+                )
+        else:
+            st.sidebar.warning("Nenhum modelo encontrado em models/")
 
     st.sidebar.markdown("---")
 
     # Status da API
-    api_status = check_api_health()
-    if api_status:
+    if api_online:
         st.sidebar.success("✅ API Online")
     else:
         st.sidebar.warning("⚠️ API Offline - Usando modelo local")
@@ -1265,10 +1350,14 @@ def _render_local_feature_importance() -> None:
 
     if isinstance(package, dict):
         model = package.get("model")
+        pkg_preprocessor = package.get("scaler")
     else:
         model = package
+        pkg_preprocessor = None
 
     tree_model, preprocessor, _ = extract_model_components(model)
+    if preprocessor is None and pkg_preprocessor is not None:
+        preprocessor = pkg_preprocessor
     if tree_model is None:
         st.error("Não foi possível extrair o modelo.")
         return
@@ -1341,13 +1430,22 @@ def _render_local_shap_analysis() -> None:
 
     if isinstance(package, dict):
         model = package.get("model")
+        pkg_feature_engineer = package.get("feature_engineer")
+        pkg_preprocessor = package.get("scaler")
     else:
         model = package
+        pkg_feature_engineer = None
+        pkg_preprocessor = None
 
     try:
         import shap
 
         tree_model, preprocessor, feature_engineering = extract_model_components(model)
+        # Fallback para componentes armazenados no pacote
+        if feature_engineering is None and pkg_feature_engineer is not None:
+            feature_engineering = pkg_feature_engineer
+        if preprocessor is None and pkg_preprocessor is not None:
+            preprocessor = pkg_preprocessor
         if tree_model is None:
             st.error("Não foi possível extrair o modelo para análise SHAP.")
             return
@@ -1795,16 +1893,15 @@ def _simulate_production_data(
     Returns:
          DataFrame de dados simulados com drift aplicado
     """
-    rng = np.random.default_rng(seed=42)
-    simulated = reference_df.sample(
-        n=min(sample_size, len(reference_df)), replace=True, random_state=42
-    ).copy()
+    rng = np.random.default_rng()
+    simulated = reference_df.sample(n=min(sample_size, len(reference_df)), replace=True).copy()
 
     # Aplica drift nas features numéricas
     for col in numeric_features:
         if col in simulated.columns:
+            simulated[col] = pd.to_numeric(simulated[col], errors="coerce")
             std = simulated[col].std()
-            if std == 0:
+            if std == 0 or pd.isna(std):
                 continue
             shift = drift_intensity * std * rng.choice([-1, 1])
             noise = rng.normal(0, std * drift_intensity * 0.3, size=len(simulated))
@@ -1859,6 +1956,15 @@ def render_data_drift():
         "Index) e **teste KS** (Kolmogorov-Smirnov) para identificar mudan\u00e7as na "
         "distribui\u00e7\u00e3o das features."
     )
+
+    # Botão para forçar atualização dos dados de referência
+    if st.button("\U0001f504 Atualizar Dados de Referência"):
+        load_sample_data.clear()
+        if "drift_production_df" in st.session_state:
+            del st.session_state["drift_production_df"]
+        if "drift_params" in st.session_state:
+            del st.session_state["drift_params"]
+        st.rerun()
 
     # Carrega dados de referência
     reference_df = load_sample_data()
@@ -1958,18 +2064,16 @@ def render_data_drift():
             st.error("**Drift severo**: Distribui\u00e7\u00f5es significativamente diferentes.")
 
         if st.button("Gerar Dados Simulados", type="primary"):
-            with st.spinner("Gerando dados simulados..."):
-                production_df = _simulate_production_data(
-                    reference_df,
-                    drift_intensity,
-                    sample_size,
-                    numeric_features,
-                    categorical_features,
-                )
-                st.session_state["drift_production_df"] = production_df
-                st.success(
-                    f"{len(production_df)} registros simulados com " f"drift={drift_intensity:.0%}"
-                )
+            production_df = _simulate_production_data(
+                reference_df,
+                drift_intensity,
+                sample_size,
+                numeric_features,
+                categorical_features,
+            )
+            st.session_state["drift_production_df"] = production_df
+            st.session_state["drift_params"] = (drift_intensity, sample_size)
+            st.rerun()
 
         # Recupera do session state se gerado anteriormente
         if "drift_production_df" in st.session_state and production_df is None:
@@ -1986,18 +2090,13 @@ def render_data_drift():
     # =========================================================================
     st.markdown("---")
 
-    # Codifica categóricas como códigos inteiros para PSI/KS
-    ref_encoded = reference_df.copy()
-    prod_encoded = production_df.copy()
-    for col in categorical_features:
-        if col in ref_encoded.columns:
-            ref_encoded[col] = ref_encoded[col].astype("category").cat.codes
-        if col in prod_encoded.columns:
-            cat_type = pd.CategoricalDtype(categories=reference_df[col].dropna().unique())
-            prod_encoded[col] = prod_encoded[col].astype(cat_type).cat.codes
+    # Converte TotalCharges para numérico (contém ' ' no dataset original)
+    for df_temp in [reference_df, production_df]:
+        if "TotalCharges" in df_temp.columns:
+            df_temp["TotalCharges"] = pd.to_numeric(df_temp["TotalCharges"], errors="coerce")
 
     valid_features = [
-        f for f in all_features if f in ref_encoded.columns and f in prod_encoded.columns
+        f for f in all_features if f in reference_df.columns and f in production_df.columns
     ]
 
     api_online = check_api_health()
@@ -2018,10 +2117,10 @@ def render_data_drift():
             feature_results_raw = api_report.get("features", [])
             st.caption("Fonte: API")
         else:
-            # Fallback local
+            # Fallback local — detect_drift lida com categóricas automaticamente
             drift_report = detect_drift(
-                reference_df=ref_encoded,
-                current_df=prod_encoded,
+                reference_df=reference_df,
+                current_df=production_df,
                 features=valid_features,
                 categorical_features=categorical_features,
             )

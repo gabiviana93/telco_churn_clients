@@ -146,7 +146,7 @@ async def predict_batch(
         high_risk_count = 0
 
         for _i, (pred, prob, cust_id) in enumerate(
-            zip(predictions, probabilities, customer_ids, strict=False)
+            zip(predictions, probabilities, customer_ids, strict=True)
         ):
             prediction = int(pred)
             probability = float(prob)

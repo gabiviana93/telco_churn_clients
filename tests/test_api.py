@@ -212,6 +212,83 @@ class TestDocumentation:
         assert response.status_code == 200
 
 
+class TestModelsManagementEndpoints:
+    """Testes para endpoints de gerenciamento de modelos (GET /models/ e POST /models/switch)."""
+
+    def test_list_models_returns_payload_structure(self, client):
+        """Testa se GET /models/ retorna estrutura esperada com modelos disponíveis."""
+        response = client.get("/models/")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "models" in data
+        assert "active_model" in data
+        assert "total" in data
+        assert isinstance(data["models"], list)
+        assert data["total"] == len(data["models"])
+        assert data["total"] > 0
+
+        # Verifica campos de cada modelo
+        model = data["models"][0]
+        assert "name" in model
+        assert "filename" in model
+        assert "size_mb" in model
+        assert "is_default" in model
+        assert model["filename"].endswith(".joblib")
+
+    def test_list_models_active_model_is_stem(self, client):
+        """Testa se active_model é o stem do arquivo (sem extensão)."""
+        response = client.get("/models/")
+        data = response.json()
+
+        active = data["active_model"]
+        all_names = [m["name"] for m in data["models"]]
+        assert active in all_names, f"active_model '{active}' não está na lista de nomes"
+
+    def test_switch_model_not_found(self, client):
+        """Testa 404 ao tentar trocar para modelo inexistente."""
+        response = client.post("/models/switch", json={"model_name": "nonexistent_model_xyz"})
+        assert response.status_code == 404
+
+        data = response.json()
+        assert data["detail"]["error_code"] == "MODEL_NOT_FOUND"
+
+    def test_switch_model_success(self, client):
+        """Testa troca bem-sucedida para um modelo disponível."""
+        # Descobre um modelo válido via GET
+        list_resp = client.get("/models/")
+        models = list_resp.json()["models"]
+        target = models[0]["name"]
+
+        response = client.post("/models/switch", json={"model_name": target})
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["active_model"] == target
+        assert "estimator_name" in data
+        assert "message" in data
+
+    def test_switch_model_reflected_in_list(self, client):
+        """Testa se a troca é refletida no GET /models/ subsequente."""
+        list_resp = client.get("/models/")
+        models = list_resp.json()["models"]
+        if len(models) < 2:
+            pytest.skip("Apenas um modelo disponível, não é possível testar troca")
+
+        target = models[-1]["name"]
+        switch_resp = client.post("/models/switch", json={"model_name": target})
+        assert switch_resp.status_code == 200
+
+        verify_resp = client.get("/models/")
+        assert verify_resp.json()["active_model"] == target
+
+    def test_switch_model_missing_body(self, client):
+        """Testa 422 quando body está ausente no POST /models/switch."""
+        response = client.post("/models/switch")
+        assert response.status_code == 422
+
+
 class TestEdgeCases:
     """Testes para casos extremos e tratamento de erros."""
 

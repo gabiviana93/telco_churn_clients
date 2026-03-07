@@ -315,6 +315,15 @@ def convert_target_to_binary(y, positive_class: str = "Yes") -> pd.Series:
     if y.dtype == "object" or isinstance(y.dtype, pd.CategoricalDtype):
         y_lower = y.str.lower() if hasattr(y.str, "lower") else y
         positive_lower = positive_class.lower()
+
+        # Validar que target contém exatamente 2 classes
+        unique_vals = set(y_lower.dropna().unique())
+        if len(unique_vals) > 2:
+            logger.warning(
+                f"Target possui mais de 2 classes: {unique_vals}. "
+                f"Apenas '{positive_class}' será mapeado para 1, demais para 0."
+            )
+
         y_binary = (y_lower == positive_lower).astype(int)
 
         logger.info(

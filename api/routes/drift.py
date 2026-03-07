@@ -167,15 +167,15 @@ async def detect_data_drift(
                 },
             )
 
-        # Encode categoricals
-        ref_encoded, prod_encoded = _encode_categoricals(
-            reference_df, production_df, categorical_features
-        )
+        # Converte TotalCharges para numérico (contém ' ' no dataset original)
+        for df_temp in [reference_df, production_df]:
+            if "TotalCharges" in df_temp.columns:
+                df_temp["TotalCharges"] = pd.to_numeric(df_temp["TotalCharges"], errors="coerce")
 
-        # Run drift detection
+        # Run drift detection — detect_drift lida com categóricas automaticamente
         drift_report = detect_drift(
-            reference_df=ref_encoded,
-            current_df=prod_encoded,
+            reference_df=reference_df,
+            current_df=production_df,
             features=valid_features,
             categorical_features=categorical_features,
         )

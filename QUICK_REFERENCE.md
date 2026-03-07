@@ -123,7 +123,7 @@ model:
 poetry install
 poetry shell
 
-# Testes (190 testes, 70%+ coverage)
+# Testes (196 testes, 70%+ coverage)
 bash scripts/test_ci_locally.sh            # CI completo
 poetry run pytest tests/ -v             # Todos os testes
 poetry run pytest --cov=src --cov=api   # Com cobertura
@@ -150,6 +150,12 @@ docker compose down                     # Parar tudo
 
 # Dashboard (local, sem Docker)
 poetry run streamlit run scripts/dashboard.py  # Monitoramento
+
+# API — Gerenciamento de modelos
+curl http://localhost:8000/models/                           # Listar modelos
+curl -X POST http://localhost:8000/models/switch \           # Trocar modelo
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "model_catboost"}'
 ```
 
 ---
@@ -167,6 +173,45 @@ src/evaluate.py            ← Mude métricas (regressão/multiclasse)
 src/utils.py               ← Normalização de chaves de métricas
 tests/conftest.py          ← Adapte fixtures com seus dados
 ```
+
+---
+
+## API REST — Endpoints
+
+A API é servida via FastAPI e expõe os seguintes endpoints:
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/health` | Health check completo |
+| GET | `/health/live` | Liveness probe (Kubernetes) |
+| GET | `/health/ready` | Readiness probe (Kubernetes) |
+| GET | `/health/model-info` | Info do modelo ativo |
+| POST | `/predict/` | Predição individual |
+| POST | `/predict/batch` | Predição em lote |
+| POST | `/drift/detect` | Detectar data drift via CSV |
+| GET | `/drift/status` | Status do monitoramento de drift |
+| GET | `/interpret/feature-importance` | Importância de features |
+| POST | `/interpret/shap/explain` | Explicação SHAP individual |
+| GET | `/interpret/shap/global` | Resumo SHAP global |
+| GET | `/models/` | Listar modelos disponíveis |
+| POST | `/models/switch` | Trocar modelo ativo (hot-swap) |
+
+### Gerenciamento de Modelos via API
+
+```bash
+# Listar modelos disponíveis
+curl http://localhost:8000/models/
+
+# Trocar modelo ativo (sem reiniciar o servidor)
+curl -X POST http://localhost:8000/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "model_catboost"}'
+
+# Verificar modelo ativo
+curl http://localhost:8000/health/model-info
+```
+
+> **Hot-swap**: A troca é atômica — se o novo modelo falhar, o anterior é restaurado automaticamente.
 
 ---
 

@@ -140,6 +140,7 @@ def load_model_package(model_path: str | Path = None) -> dict[str, Any]:
             return {
                 "model": package["model"],
                 "scaler": package.get("preprocessor"),
+                "feature_engineer": package.get("feature_engineer"),
                 "features": {"input_features": None, "transformed_features": None},
                 "threshold": package.get("threshold"),
                 "metrics": package.get("metrics"),
@@ -197,6 +198,11 @@ def predict_with_package(
 
         # Reordenar colunas para match esperado
         X = X[expected]
+
+    # Aplicar feature engineering
+    feature_engineer = model_package.get("feature_engineer")
+    if feature_engineer is not None:
+        X = feature_engineer.transform(X)
 
     # Aplicar preprocessing
     scaler = model_package.get("scaler")
