@@ -11,7 +11,7 @@
 [![CatBoost](https://img.shields.io/badge/CatBoost-1.2-yellow.svg)](https://catboost.ai/)
 [![Optuna](https://img.shields.io/badge/Optuna-4.7-blueviolet.svg)](https://optuna.org/)
 [![MLflow](https://img.shields.io/badge/MLflow-2.22-0194E2.svg)](https://mlflow.org/)
-[![Tests](https://img.shields.io/badge/tests-196%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-256%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-74%25-green.svg)]()
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.54-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)](https://www.docker.com/)
@@ -92,7 +92,7 @@ Este projeto demonstra competências em todo o ciclo de Data Science:
 ### MLOps & Production
 - **Tracking**: MLflow para experimentos
 - **API REST**: FastAPI com validação Pydantic
-- **Testing**: 196 testes pytest com 74% coverage
+- **Testing**: 256 testes pytest com 74% coverage
 - **Containerização**: Docker multi-stage com docker-compose
 - **CI/CD**: 3 workflows GitHub Actions (CI, Code Quality, PR Analysis)
 
@@ -248,7 +248,7 @@ churn_clientes/
 │   ├── 03_modeling.ipynb         # Modelagem otimizada
 │   └── 04_shap_interpretability.ipynb  # Interpretabilidade SHAP
 │
-├── tests/                        # Suite de testes (196 testes, 74% coverage)
+├── tests/                        # Suite de testes (256 testes, 74% coverage)
 ├── models/                       # Modelos treinados (.joblib)
 ├── reports/                      # Relatórios (metrics.json, drift.json)
 ├── config/                       # Configurações YAML (project.yaml)
@@ -340,7 +340,7 @@ print(response.json())
 ## Testes
 
 ```bash
-# Executar todos os testes (196 testes)
+# Executar todos os testes (256 testes)
 poetry run pytest
 
 # Com relatório de cobertura (mínimo 70%)
@@ -350,8 +350,9 @@ poetry run pytest --cov=src --cov=api --cov-report=html
 make test
 ```
 
-**196 testes** (74% coverage) cobrindo:
-- Endpoints da API (predict, health, interpret, drift)
+**256 testes** (74% coverage) cobrindo:
+- Endpoints da API (predict, health, interpret, drift, models)
+- Dashboard Streamlit (predição, métricas, drift, API helpers)
 - Feature Engineering (FeatureEngineer + AdvancedFeatureEngineer)
 - Utilitários e Notebook Utils (IV, outliers, métricas)
 - Preprocessamento e avaliação (incluindo AUPRC)

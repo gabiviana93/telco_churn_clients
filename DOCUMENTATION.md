@@ -36,7 +36,7 @@ Sistema de predição de churn (cancelamento) de clientes para empresas de telec
 - **Precision**: 54.6%
 - **Recall**: 75.7%
 - **Threshold otimizado**: 0.41
-- **Testes**: 190 passando (cobertura 70%+)
+- **Testes**: 256 passando (cobertura 70%+)
 
 > Baseline LightGBM (train_pipeline.py): F1=57.4%, AUC=83.3%.
 
@@ -1232,10 +1232,15 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - **`categorical_psi()` (monitoring.py)**: Corrigido cálculo de PSI categórico — `dropna()` agora aplicado antes de `value_counts()` e `len()`, não apenas em `unique()`. Proporções eram distorcidas quando a série continha NaN.
 - **Dashboard model switch (dashboard.py)**: Corrigido auto-trigger de `POST /models/switch` no primeiro render — `selected_model_name` agora inicializado a partir de `active_model` da API, e switch só dispara quando `prev_selected is not None`.
 - **`POST /models/switch` response**: `active_model` agora retorna o stem do arquivo (consistente com `GET /models/`). Adicionado campo `estimator_name` para nome legível do estimador.
+- **`ModelService.reload_model()` atômico**: Refatorado para criar instância temporária isolada, carregar modelo nela, e só então fazer swap atômico das referências — elimina race condition onde requests concorrentes podiam ver estado parcialmente inicializado.
+- **`features_with_drift` consistência (monitoring.py)**: Adicionada property `has_any_drift` (severity != NONE); `features_with_drift` agora usa `has_any_drift` para consistência com `overall_severity` (antes podia reportar 0 features com drift mas severity LOW).
+- **Dashboard métricas por modelo**: `_load_metrics_from_report()` agora retorna métricas específicas do modelo selecionado via `individual_results`, em vez de sempre retornar as métricas top-level (CatBoost).
+- **Dashboard stale model cache**: Removido `@st.cache_resource` de `load_model()` que causava retorno do modelo da primeira chamada ignorando seleção posterior. Simplificados 3 call sites que duplicavam lógica de seleção de modelo.
 
 #### Testes
-- **196 testes passando** (era 190)
+- **256 testes passando** (era 196)
 - Novos testes em `test_api.py`: `TestModelsManagementEndpoints` (6 testes cobrindo `GET /models/` e `POST /models/switch`)
+- Novo `test_dashboard.py`: 60 testes cobrindo funções utilitárias, predição local, métricas por modelo, helpers de severity/drift, API wrappers e routing de `load_model()`
 
 ### v1.8.0 (Março 2026)
 
@@ -1286,7 +1291,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ### v1.5.0 (Março 2026)
 
 #### Qualidade & Testes
-- **196 testes passando** (cobertura 70%+, threshold 70%)
+- **256 testes passando** (cobertura 70%+, threshold 70%)
 - Novos testes: `test_utils.py` (38), `test_feature_engineering.py` (25), `test_notebook_utils.py` (24)
 - Coverage mínimo atualizado de 40% para 70% (pyproject.toml + CI)
 
@@ -1327,7 +1332,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - 7 bugs críticos corrigidos (SMOTE leakage, ModelConfig, test-set snooping, etc.)
 
 #### Testes
-- **196 testes passando** (cobertura 70%+)
+- **256 testes passando** (cobertura 70%+)
 - Novos testes de integração (`test_integration.py`)
 - Novos testes: `test_utils.py`, `test_feature_engineering.py`, `test_notebook_utils.py`
 
@@ -1351,7 +1356,7 @@ Veja a seção de Changelog abaixo para detalhes completos.
 - **requirements.txt sincronizado**: Adicionados optuna, imbalanced-learn, catboost, matplotlib, seaborn, shap
 
 #### Testes
-- **82→196 testes passando**
+- **82→256 testes passando**
 - Novos testes para `optimization.py` (16 testes)
 
 ### v1.2.1 (Março 2026)

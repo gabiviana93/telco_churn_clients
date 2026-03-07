@@ -170,16 +170,14 @@ def load_model_by_path(model_path: Path):
         return None
 
 
-@st.cache_resource
 def load_model():
-    """Carrega o modelo treinado usando loader centralizado."""
-    # Usa modelo selecionado do session state se disponível
+    """Carrega o modelo ativo (selecionado no sidebar ou default)."""
     if "selected_model_path" in st.session_state:
         return load_model_by_path(st.session_state.selected_model_path)
 
     try:
         package = load_model_package(MODEL_PATH)
-        return package  # Return full package, not just model
+        return package
     except FileNotFoundError:
         return None
 
@@ -477,26 +475,20 @@ def render_sidebar():
         st.sidebar.warning("⚠️ API Offline - Usando modelo local")
 
     # Status do Modelo
-    if "selected_model_path" in st.session_state:
-        package = load_model_by_path(st.session_state.selected_model_path)
-        if package is not None:
-            st.sidebar.success(f"✅ Modelo: {st.session_state.selected_model_name}")
-            # Mostra métricas se disponível
-            if isinstance(package, dict) and "metadata" in package:
-                metadata = package.get("metadata", {})
-                metrics = normalize_metrics_keys(metadata.get("metrics", {}))
-                if metrics:
-                    f1 = metrics.get("f1_score", 0)
-                    auc = metrics.get("roc_auc", 0)
-                    st.sidebar.caption(f"F1: {f1:.2%} | AUC: {auc:.2%}")
-        else:
-            st.sidebar.error("❌ Erro ao carregar modelo")
+    package = load_model()
+    if package is not None:
+        model_label = st.session_state.get("selected_model_name", Path(MODEL_PATH).stem)
+        st.sidebar.success(f"✅ Modelo: {model_label}")
+        # Mostra métricas se disponível
+        if isinstance(package, dict) and "metadata" in package:
+            metadata = package.get("metadata", {})
+            metrics = normalize_metrics_keys(metadata.get("metrics", {}))
+            if metrics:
+                f1 = metrics.get("f1_score", 0)
+                auc = metrics.get("roc_auc", 0)
+                st.sidebar.caption(f"F1: {f1:.2%} | AUC: {auc:.2%}")
     else:
-        model = load_model()
-        if model is not None:
-            st.sidebar.success("✅ Modelo Carregado")
-        else:
-            st.sidebar.error("❌ Modelo não encontrado")
+        st.sidebar.error("❌ Modelo não encontrado")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ℹ️ Sobre")
@@ -516,13 +508,29 @@ def _get_active_model_name() -> str:
 
 
 def _load_metrics_from_report() -> dict:
-    """Carrega métricas de reports/metrics.json ou fallback do pacote do modelo."""
+    """Carrega métricas de reports/metrics.json para o modelo ativo.
+
+    Se o modelo selecionado tiver métricas individuais em individual_results,
+    retorna essas métricas. Caso contrário, retorna as métricas top-level
+    (do melhor modelo).
+    """
     import json
 
     metrics_json_path = REPORTS_DIR / "metrics.json"
     if metrics_json_path.exists():
         with open(metrics_json_path) as f:
-            return normalize_metrics_keys(json.load(f))
+            data = json.load(f)
+
+        # Tenta retornar métricas específicas do modelo selecionado
+        individual = data.get("individual_results", {})
+        if individual:
+            model_stem = _get_active_model_name()
+            # Extrai algoritmo do stem (ex.: "model_xgboost" → "xgboost")
+            for algo_key in individual:
+                if algo_key in model_stem:
+                    return normalize_metrics_keys(individual[algo_key])
+
+        return normalize_metrics_keys(data)
 
     package = load_model()
     if isinstance(package, dict):
@@ -670,10 +678,7 @@ def _render_shap_local(customer_data: dict[str, Any]) -> None:
     try:
         import shap
 
-        if "selected_model_path" in st.session_state:
-            package = load_model_by_path(st.session_state.selected_model_path)
-        else:
-            package = load_model_package(MODEL_PATH)
+        package = load_model()
 
         if package is None:
             st.warning("Modelo não carregado para análise SHAP.")
@@ -942,11 +947,7 @@ def render_prediction():
             if check_api_health():
                 result = predict_via_api(customer_data)
             else:
-                # Usa modelo selecionado do session state
-                if "selected_model_path" in st.session_state:
-                    package = load_model_by_path(st.session_state.selected_model_path)
-                else:
-                    package = load_model()
+                package = load_model()
 
                 if package:
                     result = predict_locally(package, customer_data)
