@@ -165,8 +165,7 @@ def load_model_by_path(model_path: Path):
     try:
         package = load_model_package(model_path)
         return package
-    except Exception as e:
-        st.error(f"Erro ao carregar modelo: {e}")
+    except Exception:
         return None
 
 
