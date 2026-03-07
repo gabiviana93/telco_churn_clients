@@ -221,6 +221,56 @@ class ModelService:
                 "error": str(e),
             }
 
+    def reload_model(self, model_name: str) -> None:
+        """Recarrega o serviço com um modelo diferente.
+
+        Args:
+            model_name: Nome do modelo (sem extensão .joblib).
+
+        Raises:
+            FileNotFoundError: Se o modelo não existir.
+            RuntimeError: Se falhar ao carregar o modelo.
+        """
+        from src.config import get_model_path
+
+        model_path = get_model_path(model_name)
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_path}")
+
+        # Salva estado anterior para rollback em caso de erro
+        prev_model = self._model
+        prev_pipeline = self._pipeline
+        prev_preprocessor = self._preprocessor
+        prev_feature_engineer = self._feature_engineer
+        prev_threshold = self._threshold
+        prev_info = self._model_info
+
+        # Atualiza o caminho e tenta recarregar
+        original_path = settings.model_path_resolved
+        settings.MODEL_PATH = str(model_path)
+        try:
+            self._model = None
+            self._pipeline = None
+            self._preprocessor = None
+            self._feature_engineer = None
+            self._threshold = 0.5
+            self._model_info = {}
+            self._load_model()
+            if not self.is_loaded:
+                raise RuntimeError(f"Failed to load model: {model_name}")
+            self._model_info["file_model_name"] = model_name
+            logger.info("Model reloaded successfully", model_name=model_name)
+        except Exception:
+            # Rollback ao estado anterior
+            self._model = prev_model
+            self._pipeline = prev_pipeline
+            self._preprocessor = prev_preprocessor
+            self._feature_engineer = prev_feature_engineer
+            self._threshold = prev_threshold
+            self._model_info = prev_info
+            settings.MODEL_PATH = str(original_path) if original_path else None
+            raise
+
     @property
     def is_loaded(self) -> bool:
         """Verifica se o modelo está carregado."""
@@ -248,6 +298,16 @@ class ModelService:
     def pipeline(self) -> ChurnPipeline | None:
         """Obtém o ChurnPipeline se disponível."""
         return self._pipeline
+
+    @property
+    def preprocessor(self):
+        """Obtém o pré-processador se disponível (modelos legados)."""
+        return self._preprocessor
+
+    @property
+    def feature_engineer(self):
+        """Obtém o feature engineer se disponível (modelos legados)."""
+        return self._feature_engineer
 
     def get_model_info(self) -> dict[str, Any]:
         """Obtém metadados e informações do modelo."""
@@ -343,6 +403,15 @@ class ModelService:
                         feature_names = get_feature_names(preprocessor)
                     except Exception:
                         pass
+
+            # Fallback: usar preprocessor armazenado (modelos legados)
+            if feature_names is None and self._preprocessor is not None:
+                from src.interpret import get_feature_names
+
+                try:
+                    feature_names = get_feature_names(self._preprocessor)
+                except Exception:
+                    pass
 
             # Fallback para nomes genéricos se extração do preprocessador falhar
             if feature_names is None or len(feature_names) != len(importances):

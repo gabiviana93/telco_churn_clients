@@ -216,7 +216,7 @@ churn_clientes/
 │
 ├── api/                          # API REST (FastAPI)
 │   ├── main.py                   # Aplicação FastAPI
-│   ├── routes/                   # Endpoints (predict, health, interpret, drift)
+│   ├── routes/                   # Endpoints (predict, models, health, interpret, drift)
 │   ├── schemas/                  # Modelos Pydantic
 │   └── services/                 # Lógica de negócio (ModelService)
 │
@@ -274,8 +274,8 @@ O projeto usa as **mesmas classes** em todos os componentes:
 |------------|-------------------|
 | Notebooks | `ChurnPipeline`, `HyperparameterOptimizer` |
 | Scripts | `ChurnPipeline`, `evaluate()` |
-| API REST | `ModelService` (usa `load_model_package`) |
-| Dashboard | `load_model()`, `predict_via_api()`, `_load_metrics_from_report()` |
+| API REST | `ModelService` (usa `load_model_package`, hot-swap via `/models/switch`) |
+| Dashboard | `load_model()`, `predict_via_api()`, `switch_model_via_api()` |
 
 ---
 
@@ -287,6 +287,8 @@ O projeto usa as **mesmas classes** em todos os componentes:
 |--------|----------|-----------|
 | `POST` | `/predict/` | Predição individual |
 | `POST` | `/predict/batch` | Predição em lote |
+| `GET` | `/models/` | Listar modelos disponíveis |
+| `POST` | `/models/switch` | Trocar modelo ativo |
 | `GET` | `/health` | Status da API |
 | `GET` | `/health/live` | Liveness probe (Kubernetes) |
 | `GET` | `/health/ready` | Readiness probe (Kubernetes) |

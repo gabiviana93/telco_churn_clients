@@ -230,7 +230,27 @@ curl -X POST http://localhost:8000/predict/ \
 # {"success":true,"prediction":{"customer_id":"test-001","churn_prediction":1,"churn_probability":0.84,"churn_risk":"HIGH"},...}
 ```
 
-### 5.4 Documentação da API (Swagger)
+### 5.4 Gerenciamento de Modelos via API
+
+```bash
+# Listar modelos disponíveis
+curl http://localhost:8000/models/
+
+# Saída esperada:
+# {"models":[{"name":"model","filename":"model.joblib","size_mb":1.23,"is_default":true},...],"active_model":"CatBoostClassifier (ChurnPipeline)","total":5}
+
+# Trocar o modelo ativo
+curl -X POST http://localhost:8000/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "model_xgboost"}'
+
+# Saída esperada:
+# {"success":true,"active_model":"XGBClassifier","message":"Modelo trocado para 'model_xgboost' com sucesso."}
+```
+
+> **Nota:** O Dashboard detecta automaticamente se a API está online. Quando online, a seleção de modelo no sidebar troca o modelo diretamente na API, garantindo consistência entre Dashboard e API.
+
+### 5.5 Documentação da API (Swagger)
 
 Acesse: **http://localhost:8000/docs**
 
@@ -265,7 +285,7 @@ Acesse: **http://localhost:8501**
 - **Data Drift**: Monitoramento de drift com PSI (upload CSV)
 - **MLflow**: Tracking de experimentos
 
-> **Nota:** O nome do modelo ativo é exibido em cada página do dashboard. Troque o modelo pela sidebar.
+> **Nota:** O nome do modelo ativo é exibido em cada página do dashboard. Troque o modelo pela sidebar. Quando a API está online, a troca de modelo é sincronizada automaticamente via `POST /models/switch`.
 
 ---
 

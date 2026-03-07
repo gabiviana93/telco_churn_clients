@@ -86,7 +86,7 @@ churn_clientes/
 │   ├── core/                     # Configuração e logging
 │   │   ├── config.py             # Settings Pydantic
 │   │   └── logging.py            # Logging estruturado
-│   ├── routes/                   # Endpoints (predict, health, interpret, drift)
+│   ├── routes/                   # Endpoints (predict, models, health, interpret, drift)
 │   ├── schemas/                  # Modelos Pydantic (gerados dinamicamente do YAML)
 │   └── services/                 # ModelService singleton
 │
@@ -590,8 +590,15 @@ predictions, probas = predict_with_package(package, df, return_proba=True)
 from src.monitoring import detect_drift, population_stability_index
 
 # Detectar drift entre dados de referência e novos dados
-features = X_train.columns.tolist()
-drift_report = detect_drift(X_train, X_new, features=features)
+numeric_features = ["tenure", "MonthlyCharges", "TotalCharges"]
+categorical_features = ["Contract", "InternetService", "PaymentMethod"]
+all_features = numeric_features + categorical_features
+
+drift_report = detect_drift(
+    X_train, X_new,
+    features=all_features,
+    categorical_features=categorical_features  # PSI categórico por proporções
+)
 
 if drift_report.features_with_drift > 0:
     print("ALERTA: Drift detectado!")
@@ -600,16 +607,29 @@ if drift_report.features_with_drift > 0:
             print(f"  {result.feature_name}: PSI={result.psi:.4f} ({result.severity})")
 ```
 
+> **Nota**: Para features categóricas, `detect_drift()` usa `categorical_psi()` (comparação por proporções de cada categoria) em vez de histogram binning, evitando PSI artificialmente alto em variáveis com poucas categorias.
+
 ### PSI (Population Stability Index)
 
 ```python
 from src.monitoring import population_stability_index, classify_drift_severity
 
-# Calcular PSI para uma feature
+# Calcular PSI para uma feature numérica
 psi_value = population_stability_index(reference_values, current_values)
 severity = classify_drift_severity(psi_value)
 print(f"PSI: {psi_value:.4f} - Severity: {severity}")
 ```
+
+### Lógica de Escalação de Severidade
+
+A severidade geral do drift é determinada pela contagem de features afetadas:
+
+| Condição | Severidade Geral |
+|----------|------------------|
+| ≥2 features com drift HIGH | **HIGH** |
+| 1 feature HIGH ou ≥2 features MODERATE | **MODERATE** |
+| Qualquer feature com drift LOW ou MODERATE | **LOW** |
+| Nenhum drift detectado | **NONE** |
 
 ### MLflow Tracking
 
@@ -845,6 +865,8 @@ poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 | `/health/ready` | GET | Readiness probe (Kubernetes) |
 | `/predict/` | POST | Predição single |
 | `/predict/batch` | POST | Predição em batch |
+| `/models/` | GET | Listar modelos disponíveis |
+| `/models/switch` | POST | Trocar modelo ativo (hot-swap) |
 | `/model/info` | GET | Informações do modelo |
 | `/interpret/feature-importance` | GET | Feature importance |
 | `/interpret/shap/explain` | POST | SHAP explanation |
@@ -901,6 +923,36 @@ curl -X POST "http://localhost:8000/predict/" \
 }
 ```
 
+### Gerenciamento de Modelos
+
+A API permite listar e trocar o modelo ativo em tempo real (hot-swap):
+
+```bash
+# Listar modelos disponíveis
+curl http://localhost:8000/models/
+
+# Resposta:
+# {
+#   "models": [
+#     {"name": "model", "filename": "model.joblib", "size_mb": 1.23, "is_default": true},
+#     {"name": "model_xgboost", "filename": "model_xgboost.joblib", "size_mb": 0.85, "is_default": false},
+#     ...
+#   ],
+#   "active_model": "CatBoostClassifier (ChurnPipeline)",
+#   "total": 5
+# }
+
+# Trocar modelo ativo
+curl -X POST http://localhost:8000/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "model_xgboost"}'
+
+# Resposta:
+# {"success": true, "active_model": "XGBClassifier", "message": "Modelo trocado para 'model_xgboost' com sucesso."}
+```
+
+A troca é atômica com rollback automático: se o novo modelo falhar ao carregar, o modelo anterior é restaurado.
+
 ---
 
 ## Dashboard (Streamlit)
@@ -935,6 +987,14 @@ Acesse: http://localhost:8501
 ### Identificação do Modelo
 
 O dashboard mostra o nome do modelo ativo em cada página. É possível trocar o modelo na sidebar, e todas as páginas refletem o modelo selecionado.
+
+### Seleção de Modelo via API
+
+Quando a API está online, o dashboard sincroniza a seleção de modelo diretamente com a API:
+- A lista de modelos é obtida via `GET /models/`
+- Ao trocar o modelo no sidebar, o dashboard chama `POST /models/switch` para aplicar a mudança na API
+- As predições e interpretações subsequentes usam o modelo recém-ativado
+- Se a API estiver offline, o dashboard faz fallback para carregamento local de modelos
 
 ---
 
@@ -1165,6 +1225,26 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ---
 
 ## Changelog
+
+### v1.8.0 (Março 2026)
+
+#### Revisão Completa e Correções de Bugs
+- **Feature Engineering**: Corrigido alinhamento de índices em `AdvancedFeatureEngineer.fit()` e `_fit_supervised_encodings()` — `y_binary`/`y` podia ter `RangeIndex` enquanto `df` mantinha índices originais do `train_test_split`, causando `KeyError` em `groupby + .loc`
+- **Monitoramento**: Corrigido operador assimétrico na escalação de severidade — `mod_count` agora usa `>=` consistente com `high_count`
+- **API Batch Prediction**: Alterado `zip(..., strict=False)` para `strict=True` em `predict_batch()` — evita descarte silencioso de resultados quando arrays têm tamanhos diferentes
+- **API SHAP**: Alterado `zip(..., strict=False)` para `strict=True` nos endpoints `/shap/explain` e `/shap/global` — evita mismatch silencioso entre feature names e SHAP values
+- **Utils**: Adicionado warning em `convert_target_to_binary()` quando target possui mais de 2 classes
+- **Cleanup**: Removido import não utilizado `DRIFT_ESCALATION_LOW_FRACTION` e variável `n` não utilizada em `monitoring.py`
+
+### v1.7.0 (Março 2026)
+
+#### Gerenciamento de Modelos via API
+- **Novos endpoints**: `GET /models/` (listar modelos) e `POST /models/switch` (trocar modelo ativo)
+- **Hot-swap de modelos**: Troca atômica com rollback automático em caso de falha
+- **`ModelService.reload_model()`**: Novo método para recarregar modelo em tempo real
+- **Dashboard sincronizado com API**: Quando a API está online, a seleção de modelo no sidebar do Dashboard troca o modelo diretamente na API via `POST /models/switch`
+- **Fallback local**: Se a API estiver offline, o Dashboard continua funcionando com seleção local de modelos
+- **Novo arquivo**: `api/routes/models.py` com rotas de gerenciamento de modelos
 
 ### v1.6.0 (Março 2026)
 
