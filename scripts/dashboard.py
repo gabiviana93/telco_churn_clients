@@ -112,6 +112,34 @@ API_URL = f"http://{API_HOST}:{API_PORT}"
 # =============================================================================
 
 
+def _rank_best_model(
+    df: pd.DataFrame,
+    metrics: list[str] | None = None,
+) -> tuple[int, pd.Series]:
+    """Retorna (best_idx, wins) com base em vitórias por métrica.
+
+    Desempate por F1-Score quando mais de um modelo tem o mesmo nº de vitórias.
+    """
+    if metrics is None:
+        metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall"]
+
+    wins = pd.Series(0, index=df.index)
+    for m in metrics:
+        if m not in df.columns:
+            continue
+        col_vals = df[m].dropna()
+        if len(col_vals) > 0:
+            wins[col_vals.idxmax()] = wins.get(col_vals.idxmax(), 0) + 1
+
+    tied = wins[wins == wins.max()]
+    if len(tied) > 1 and "F1-Score" in df.columns:
+        best_idx = df.loc[tied.index, "F1-Score"].idxmax()
+    else:
+        best_idx = tied.index[0]
+
+    return best_idx, wins
+
+
 def _encode_categoricals(df: pd.DataFrame) -> np.ndarray:
     """Codifica colunas categóricas como códigos inteiros e retorna array numpy."""
     X_numeric = df.copy()
@@ -1848,19 +1876,7 @@ def render_model_comparison():
     ranking_metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall"]
     df_ranked = df.dropna(subset=["F1-Score"])
     if len(df_ranked) > 0:
-        # Ranking composto: conta vitórias em cada métrica
-        wins = pd.Series(0, index=df_ranked.index)
-        for m in ranking_metrics:
-            col_vals = df_ranked[m].dropna()
-            if len(col_vals) > 0:
-                wins[col_vals.idxmax()] = wins.get(col_vals.idxmax(), 0) + 1
-
-        # Desempate por F1-Score
-        best_idx = wins.sort_values(ascending=False).index[0]
-        if wins.max() == wins.iloc[0] and len(wins[wins == wins.max()]) > 1:
-            tied = wins[wins == wins.max()].index
-            best_idx = df_ranked.loc[tied, "F1-Score"].idxmax()
-
+        best_idx, wins = _rank_best_model(df_ranked, ranking_metrics)
         best_model = df_ranked.loc[best_idx]
 
         st.success(

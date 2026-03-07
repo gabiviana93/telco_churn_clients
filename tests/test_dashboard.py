@@ -790,3 +790,139 @@ class TestLoadModel:
             result = dashboard.load_model()
 
         assert result is None
+
+
+# ── Testes de _rank_best_model ────────────────────────────────────────────────
+
+
+class TestRankBestModel:
+    """Testes para lógica de ranking composto por vitórias + desempate F1."""
+
+    @pytest.fixture()
+    def dashboard(self):
+        import scripts.dashboard as mod
+
+        return mod
+
+    def test_clear_winner(self, dashboard):
+        """Modelo que vence todas as métricas é selecionado."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B", "C"],
+                "F1-Score": [0.90, 0.80, 0.70],
+                "AUC-ROC": [0.95, 0.85, 0.75],
+                "AUPRC": [0.88, 0.78, 0.68],
+                "Recall": [0.92, 0.82, 0.72],
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        assert best_idx == 0
+        assert wins[0] == 4
+
+    def test_tiebreak_by_f1(self, dashboard):
+        """Empate em vitórias é desempatado por F1-Score."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B"],
+                "F1-Score": [0.70, 0.80],  # B vence F1
+                "AUC-ROC": [0.90, 0.85],  # A vence AUC
+                "AUPRC": [0.60, 0.75],  # B vence AUPRC
+                "Recall": [0.95, 0.80],  # A vence Recall
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        # A=2, B=2 → desempate F1 → B (0.80 > 0.70)
+        assert wins[0] == 2
+        assert wins[1] == 2
+        assert best_idx == 1
+
+    def test_three_way_tie(self, dashboard):
+        """Empate triplo desempatado por F1."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B", "C"],
+                "F1-Score": [0.60, 0.70, 0.65],
+                "AUC-ROC": [0.80, 0.70, 0.75],
+                "AUPRC": [0.50, 0.55, 0.60],
+            }
+        )
+        metrics = ["F1-Score", "AUC-ROC", "AUPRC"]
+        best_idx, wins = dashboard._rank_best_model(df, metrics)
+        # A=1(AUC), B=1(F1), C=1(AUPRC) → desempate F1 → B
+        assert best_idx == 1
+
+    def test_nan_metric_ignored(self, dashboard):
+        """Métricas NaN não contam como vitória."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B"],
+                "F1-Score": [0.80, 0.70],
+                "AUC-ROC": [float("nan"), 0.90],
+                "AUPRC": [0.75, float("nan")],
+                "Recall": [0.85, 0.80],
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        # A vence F1, AUPRC, Recall (3); B vence AUC (1)
+        assert best_idx == 0
+        assert wins[0] == 3
+        assert wins[1] == 1
+
+    def test_all_nan_column_skipped(self, dashboard):
+        """Coluna inteiramente NaN não gera nenhuma vitória."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B"],
+                "F1-Score": [0.80, 0.70],
+                "AUC-ROC": [float("nan"), float("nan")],
+                "AUPRC": [0.65, 0.60],
+                "Recall": [0.75, 0.80],
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        # A vence F1 e AUPRC (2); B vence Recall (1); AUC skipped
+        assert wins.sum() == 3
+        assert best_idx == 0
+
+    def test_missing_metric_column(self, dashboard):
+        """Coluna ausente no DataFrame é ignorada sem erro."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B"],
+                "F1-Score": [0.80, 0.70],
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        assert best_idx == 0
+        assert wins[0] == 1
+
+    def test_single_model(self, dashboard):
+        """Com apenas um modelo, ele é o vencedor."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["Solo"],
+                "F1-Score": [0.75],
+                "AUC-ROC": [0.80],
+                "AUPRC": [0.70],
+                "Recall": [0.85],
+            }
+        )
+        best_idx, wins = dashboard._rank_best_model(df)
+        assert best_idx == 0
+        assert wins[0] == 4
+
+    def test_custom_metrics(self, dashboard):
+        """Ranking com lista customizada de métricas."""
+        df = pd.DataFrame(
+            {
+                "Nome": ["A", "B"],
+                "F1-Score": [0.70, 0.80],
+                "AUC-ROC": [0.90, 0.85],
+                "AUPRC": [0.60, 0.75],
+                "Recall": [0.95, 0.80],
+            }
+        )
+        # Usando apenas AUPRC → B vence
+        best_idx, wins = dashboard._rank_best_model(df, ["AUPRC"])
+        assert best_idx == 1
+        assert wins[1] == 1
