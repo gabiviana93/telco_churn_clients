@@ -33,8 +33,13 @@ class DriftResult:
 
     @property
     def has_drift(self) -> bool:
-        """Verifica se a feature tem drift significativo."""
+        """Verifica se a feature tem drift significativo (MODERATE ou HIGH)."""
         return self.severity in (DriftSeverity.MODERATE, DriftSeverity.HIGH)
+
+    @property
+    def has_any_drift(self) -> bool:
+        """Verifica se a feature tem qualquer nível de drift (LOW, MODERATE ou HIGH)."""
+        return self.severity != DriftSeverity.NONE
 
 
 @dataclass
@@ -132,11 +137,11 @@ def categorical_psi(expected: np.ndarray, actual: np.ndarray) -> float:
         return 0.0
 
     # Converte para Series para usar value_counts
-    exp_series = pd.Series(expected)
-    act_series = pd.Series(actual)
+    exp_series = pd.Series(expected).dropna()
+    act_series = pd.Series(actual).dropna()
 
     # Obtém todas as categorias (união)
-    all_categories = set(exp_series.dropna().unique()) | set(act_series.dropna().unique())
+    all_categories = set(exp_series.unique()) | set(act_series.unique())
 
     if not all_categories:
         return 0.0
@@ -256,7 +261,7 @@ def detect_drift(
         )
 
     # Determine overall severity — baseado em contagem de features afetadas
-    features_with_drift = sum(1 for r in results if r.has_drift)
+    features_with_drift = sum(1 for r in results if r.has_any_drift)
     high_count = severity_counts[DriftSeverity.HIGH.value]
     mod_count = severity_counts[DriftSeverity.MODERATE.value]
     low_count = severity_counts[DriftSeverity.LOW.value]

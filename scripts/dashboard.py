@@ -397,6 +397,12 @@ def render_sidebar():
                 current_idx = model_names.index(st.session_state.selected_model_name)
             except ValueError:
                 current_idx = 0
+        else:
+            # Primeiro render: inicializa com o modelo ativo na API (sem disparar switch)
+            active_model = api_models_data.get("active_model")
+            if active_model and active_model in model_names:
+                current_idx = model_names.index(active_model)
+            st.session_state.selected_model_name = model_names[current_idx]
 
         selected_model_name = st.sidebar.selectbox(
             "Modelo (via API):",
@@ -405,9 +411,9 @@ def render_sidebar():
             help="Selecione o modelo — a troca é aplicada diretamente na API",
         )
 
-        # Troca modelo na API se o usuário selecionou um diferente
+        # Troca modelo na API somente se o usuário de fato mudou a seleção
         prev_selected = st.session_state.get("selected_model_name")
-        if selected_model_name != prev_selected:
+        if prev_selected is not None and selected_model_name != prev_selected:
             with st.sidebar.status("Trocando modelo na API..."):
                 ok = switch_model_via_api(selected_model_name)
             if ok:

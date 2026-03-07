@@ -224,6 +224,10 @@ class ModelService:
     def reload_model(self, model_name: str) -> None:
         """Recarrega o serviço com um modelo diferente.
 
+        Carrega o novo modelo em variáveis locais e faz swap atômico das
+        referências no final, evitando que requisições concorrentes vejam
+        o serviço em estado parcialmente inicializado.
+
         Args:
             model_name: Nome do modelo (sem extensão .joblib).
 
@@ -237,39 +241,35 @@ class ModelService:
         if not model_path.exists():
             raise FileNotFoundError(f"Model not found: {model_path}")
 
-        # Salva estado anterior para rollback em caso de erro
-        prev_model = self._model
-        prev_pipeline = self._pipeline
-        prev_preprocessor = self._preprocessor
-        prev_feature_engineer = self._feature_engineer
-        prev_threshold = self._threshold
-        prev_info = self._model_info
-
-        # Atualiza o caminho e tenta recarregar
+        # Carrega o novo modelo em uma instância temporária isolada
         original_path = settings.model_path_resolved
         settings.MODEL_PATH = str(model_path)
         try:
-            self._model = None
-            self._pipeline = None
-            self._preprocessor = None
-            self._feature_engineer = None
-            self._threshold = 0.5
-            self._model_info = {}
-            self._load_model()
-            if not self.is_loaded:
+            loader = object.__new__(ModelService)
+            loader._model = None
+            loader._pipeline = None
+            loader._preprocessor = None
+            loader._feature_engineer = None
+            loader._threshold = 0.5
+            loader._model_info = {}
+            loader._start_time = self._start_time
+            loader._initialized = True
+            loader._load_model()
+            if not loader.is_loaded:
                 raise RuntimeError(f"Failed to load model: {model_name}")
-            self._model_info["file_model_name"] = model_name
-            logger.info("Model reloaded successfully", model_name=model_name)
+            loader._model_info["file_model_name"] = model_name
         except Exception:
-            # Rollback ao estado anterior
-            self._model = prev_model
-            self._pipeline = prev_pipeline
-            self._preprocessor = prev_preprocessor
-            self._feature_engineer = prev_feature_engineer
-            self._threshold = prev_threshold
-            self._model_info = prev_info
             settings.MODEL_PATH = str(original_path) if original_path else None
             raise
+
+        # Swap atômico — requisições concorrentes veem estado antigo ou novo, nunca parcial
+        self._model = loader._model
+        self._pipeline = loader._pipeline
+        self._preprocessor = loader._preprocessor
+        self._feature_engineer = loader._feature_engineer
+        self._threshold = loader._threshold
+        self._model_info = loader._model_info
+        logger.info("Model reloaded successfully", model_name=model_name)
 
     @property
     def is_loaded(self) -> bool:

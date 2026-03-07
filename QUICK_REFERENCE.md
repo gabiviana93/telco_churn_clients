@@ -123,7 +123,7 @@ model:
 poetry install
 poetry shell
 
-# Testes (190 testes, 70%+ coverage)
+# Testes (196 testes, 70%+ coverage)
 bash scripts/test_ci_locally.sh            # CI completo
 poetry run pytest tests/ -v             # Todos os testes
 poetry run pytest --cov=src --cov=api   # Com cobertura

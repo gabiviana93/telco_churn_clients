@@ -938,7 +938,7 @@ curl http://localhost:8000/models/
 #     {"name": "model_xgboost", "filename": "model_xgboost.joblib", "size_mb": 0.85, "is_default": false},
 #     ...
 #   ],
-#   "active_model": "CatBoostClassifier (ChurnPipeline)",
+#   "active_model": "model_catboost",
 #   "total": 5
 # }
 
@@ -948,7 +948,7 @@ curl -X POST http://localhost:8000/models/switch \
   -d '{"model_name": "model_xgboost"}'
 
 # Resposta:
-# {"success": true, "active_model": "XGBClassifier", "message": "Modelo trocado para 'model_xgboost' com sucesso."}
+# {"success": true, "active_model": "model_xgboost", "estimator_name": "XGBClassifier", "message": "Modelo trocado para 'model_xgboost' com sucesso."}
 ```
 
 A troca é atômica com rollback automático: se o novo modelo falhar ao carregar, o modelo anterior é restaurado.
@@ -1226,6 +1226,17 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 
 ## Changelog
 
+### v1.8.1 (Março 2026)
+
+#### Correções e Consistência
+- **`categorical_psi()` (monitoring.py)**: Corrigido cálculo de PSI categórico — `dropna()` agora aplicado antes de `value_counts()` e `len()`, não apenas em `unique()`. Proporções eram distorcidas quando a série continha NaN.
+- **Dashboard model switch (dashboard.py)**: Corrigido auto-trigger de `POST /models/switch` no primeiro render — `selected_model_name` agora inicializado a partir de `active_model` da API, e switch só dispara quando `prev_selected is not None`.
+- **`POST /models/switch` response**: `active_model` agora retorna o stem do arquivo (consistente com `GET /models/`). Adicionado campo `estimator_name` para nome legível do estimador.
+
+#### Testes
+- **196 testes passando** (era 190)
+- Novos testes em `test_api.py`: `TestModelsManagementEndpoints` (6 testes cobrindo `GET /models/` e `POST /models/switch`)
+
 ### v1.8.0 (Março 2026)
 
 #### Revisão Completa e Correções de Bugs
@@ -1275,7 +1286,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 ### v1.5.0 (Março 2026)
 
 #### Qualidade & Testes
-- **190 testes passando** (cobertura 70%+, threshold 70%)
+- **196 testes passando** (cobertura 70%+, threshold 70%)
 - Novos testes: `test_utils.py` (38), `test_feature_engineering.py` (25), `test_notebook_utils.py` (24)
 - Coverage mínimo atualizado de 40% para 70% (pyproject.toml + CI)
 
@@ -1316,7 +1327,7 @@ poetry run python -m memory_profiler scripts/train_pipeline.py
 - 7 bugs críticos corrigidos (SMOTE leakage, ModelConfig, test-set snooping, etc.)
 
 #### Testes
-- **190 testes passando** (cobertura 70%+)
+- **196 testes passando** (cobertura 70%+)
 - Novos testes de integração (`test_integration.py`)
 - Novos testes: `test_utils.py`, `test_feature_engineering.py`, `test_notebook_utils.py`
 
@@ -1340,7 +1351,7 @@ Veja a seção de Changelog abaixo para detalhes completos.
 - **requirements.txt sincronizado**: Adicionados optuna, imbalanced-learn, catboost, matplotlib, seaborn, shap
 
 #### Testes
-- **82→190 testes passando**
+- **82→196 testes passando**
 - Novos testes para `optimization.py` (16 testes)
 
 ### v1.2.1 (Março 2026)

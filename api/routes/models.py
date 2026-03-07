@@ -45,7 +45,8 @@ class SwitchModelResponse(BaseModel):
     """Resposta de troca de modelo."""
 
     success: bool = Field(..., description="Se a troca foi bem-sucedida")
-    active_model: str = Field(..., description="Nome do modelo agora ativo")
+    active_model: str = Field(..., description="Stem do arquivo do modelo ativo")
+    estimator_name: str = Field(..., description="Nome legível do estimador")
     message: str = Field(..., description="Mensagem de status")
 
 
@@ -116,8 +117,10 @@ async def switch_model(
         ) from e
 
     info = model_service.get_model_info()
+    active = info.get("file_model_name") or model_name
     return SwitchModelResponse(
         success=True,
-        active_model=info.get("model_name", model_name),
+        active_model=active,
+        estimator_name=info.get("model_name", "Unknown"),
         message=f"Modelo trocado para '{model_name}' com sucesso.",
     )
