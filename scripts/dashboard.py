@@ -591,9 +591,10 @@ def render_home():
     auc = metrics.get("roc_auc")
     prec = metrics.get("precision")
     rec = metrics.get("recall")
+    acc = metrics.get("accuracy")
     auprc = metrics.get("auprc")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric(label="F1-Score", value=f"{f1:.0%}" if f1 else "N/A")
     with col2:
@@ -603,6 +604,8 @@ def render_home():
     with col4:
         st.metric(label="Recall", value=f"{rec:.0%}" if rec else "N/A")
     with col5:
+        st.metric(label="Accuracy", value=f"{acc:.0%}" if acc else "N/A")
+    with col6:
         st.metric(label="AUPRC", value=f"{auprc:.0%}" if auprc else "N/A")
 
     st.markdown("---")
@@ -1677,6 +1680,17 @@ def render_model_comparison():
     # Coleta métricas dos modelos
     model_data = []
 
+    # Carrega métricas de referência do metrics.json para fallback
+    metrics_json_path = REPORTS_DIR / "metrics.json"
+    individual_results: dict[str, dict] = {}
+    if metrics_json_path.exists():
+        import json
+
+        with open(metrics_json_path) as f:
+            _mj = json.load(f)
+        for algo_key, algo_metrics in _mj.get("individual_results", {}).items():
+            individual_results[algo_key] = normalize_metrics_keys(algo_metrics)
+
     for model_info in available_models:
         try:
             # Carrega modelo diretamente com joblib para obter pacote bruto
@@ -1725,6 +1739,13 @@ def render_model_comparison():
                     algorithm = parsed_algo.upper()
 
             # Extrai métricas chave (já normalizadas)
+            # Fallback: preenche métricas ausentes com metrics.json
+            for algo_key, algo_m in individual_results.items():
+                if algo_key in model_info["name"].lower():
+                    for k, v in algo_m.items():
+                        metrics.setdefault(k, v)
+                    break
+
             f1 = metrics.get("f1_score")
             auc = metrics.get("roc_auc")
             precision = metrics.get("precision")
@@ -1783,52 +1804,42 @@ def render_model_comparison():
     df_with_metrics = df.dropna(subset=["F1-Score", "AUC-ROC"], how="all")
 
     if len(df_with_metrics) > 0:
-        col1, col2, col3 = st.columns(3)
+        # Heatmap: modelos × métricas com valores anotados
+        chart_metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall", "Precision", "Accuracy"]
+        cols_present = [m for m in chart_metrics if m in df_with_metrics.columns]
+        heatmap_df = df_with_metrics.set_index("Nome")[cols_present]
 
-        with col1:
-            # Comparação F1-Score
-            df_f1 = df_with_metrics.dropna(subset=["F1-Score"])
-            if len(df_f1) > 0:
-                fig = px.bar(
-                    df_f1,
-                    x="Nome",
-                    y="F1-Score",
-                    color="Algoritmo",
-                    title="Comparação de F1-Score",
-                    text_auto=".2%",
-                )
-                fig.update_layout(yaxis_tickformat=".0%")
-                st.plotly_chart(fig, width="stretch")
+        # Anotações formatadas como porcentagem
+        annotations = heatmap_df.apply(
+            lambda col: col.map(lambda v: f"{v:.2%}" if pd.notna(v) else "")
+        )
 
-        with col2:
-            # Comparação AUC-ROC
-            df_auc = df_with_metrics.dropna(subset=["AUC-ROC"])
-            if len(df_auc) > 0:
-                fig = px.bar(
-                    df_auc,
-                    x="Nome",
-                    y="AUC-ROC",
-                    color="Algoritmo",
-                    title="Comparação de AUC-ROC",
-                    text_auto=".2%",
-                )
-                fig.update_layout(yaxis_tickformat=".0%")
-                st.plotly_chart(fig, width="stretch")
-
-        with col3:
-            # Comparação AUPRC
-            df_auprc = df_with_metrics.dropna(subset=["AUPRC"])
-            if len(df_auprc) > 0:
-                fig = px.bar(
-                    df_auprc,
-                    x="Nome",
-                    y="AUPRC",
-                    color="Algoritmo",
-                    title="Comparação de AUPRC",
-                    text_auto=".2%",
-                )
-                fig.update_layout(yaxis_tickformat=".0%")
-                st.plotly_chart(fig, width="stretch")
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=heatmap_df.values,
+                x=heatmap_df.columns.tolist(),
+                y=heatmap_df.index.tolist(),
+                text=annotations.values,
+                texttemplate="%{text}",
+                textfont_size=13,
+                colorscale="RdYlGn",
+                zmin=(
+                    heatmap_df.values[pd.notna(heatmap_df.values)].min() - 0.02
+                    if pd.notna(heatmap_df.values).any()
+                    else 0
+                ),
+                zmax=1.0,
+                colorbar={"tickformat": ".0%", "title": "Valor"},
+            )
+        )
+        fig.update_layout(
+            title="Comparação de Métricas por Modelo",
+            xaxis_title="",
+            yaxis_title="",
+            height=max(300, 100 * len(heatmap_df)),
+            yaxis_autorange="reversed",
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
         # Gráfico radar para comparação multi-métrica
         st.markdown("### 🎯 Radar de Métricas")
