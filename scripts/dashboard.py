@@ -112,6 +112,34 @@ API_URL = f"http://{API_HOST}:{API_PORT}"
 # =============================================================================
 
 
+def _rank_best_model(
+    df: pd.DataFrame,
+    metrics: list[str] | None = None,
+) -> tuple[int, pd.Series]:
+    """Retorna (best_idx, wins) com base em vitórias por métrica.
+
+    Desempate por F1-Score quando mais de um modelo tem o mesmo nº de vitórias.
+    """
+    if metrics is None:
+        metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall"]
+
+    wins = pd.Series(0, index=df.index)
+    for m in metrics:
+        if m not in df.columns:
+            continue
+        col_vals = df[m].dropna()
+        if len(col_vals) > 0:
+            wins[col_vals.idxmax()] = wins.get(col_vals.idxmax(), 0) + 1
+
+    tied = wins[wins == wins.max()]
+    if len(tied) > 1 and "F1-Score" in df.columns:
+        best_idx = df.loc[tied.index, "F1-Score"].idxmax()
+    else:
+        best_idx = tied.index[0]
+
+    return best_idx, wins
+
+
 def _encode_categoricals(df: pd.DataFrame) -> np.ndarray:
     """Codifica colunas categóricas como códigos inteiros e retorna array numpy."""
     X_numeric = df.copy()
@@ -1845,20 +1873,30 @@ def render_model_comparison():
     st.markdown("---")
     st.markdown("### 🏆 Recomendação")
 
+    ranking_metrics = ["F1-Score", "AUC-ROC", "AUPRC", "Recall"]
     df_ranked = df.dropna(subset=["F1-Score"])
     if len(df_ranked) > 0:
-        best_model = df_ranked.loc[df_ranked["F1-Score"].idxmax()]
+        best_idx, wins = _rank_best_model(df_ranked, ranking_metrics)
+        best_model = df_ranked.loc[best_idx]
 
-        col1, col2, col3 = st.columns(3)
+        st.success(
+            f"**Melhor Modelo:** {best_model['Nome']} "
+            f"(vence em {int(wins[best_idx])}/{len(ranking_metrics)} métricas)"
+        )
 
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.success(f"**Melhor Modelo (F1):** {best_model['Nome']}")
-        with col2:
             if pd.notna(best_model.get("F1-Score")):
                 st.metric("F1-Score", f"{best_model['F1-Score']:.2%}")
-        with col3:
+        with col2:
             if pd.notna(best_model.get("AUC-ROC")):
                 st.metric("AUC-ROC", f"{best_model['AUC-ROC']:.2%}")
+        with col3:
+            if pd.notna(best_model.get("AUPRC")):
+                st.metric("AUPRC", f"{best_model['AUPRC']:.2%}")
+        with col4:
+            if pd.notna(best_model.get("Recall")):
+                st.metric("Recall", f"{best_model['Recall']:.2%}")
 
         # Botão para selecionar melhor modelo
         if st.button("🎯 Usar este modelo"):
